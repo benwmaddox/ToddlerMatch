@@ -53,9 +53,9 @@ def weeklyDebugSigningAvailable = weeklyDebugStoreFile.isPresent()
 
 '@
 if ($appGradle -notmatch 'weeklyDebugSigningAvailable') { $appGradle = $appGradle.Replace('android {', "$signing`r`nandroid {") }
-$debugConfig = @'
+$releaseSigningConfig = @'
     signingConfigs {
-        debug {
+        release {
             if (weeklyDebugSigningAvailable) {
                 storeFile file(weeklyDebugStoreFile.get())
                 storePassword 'android'
@@ -66,21 +66,21 @@ $debugConfig = @'
     }
 
 '@
-if ($appGradle -notmatch 'signingConfig signingConfigs\.debug') {
-    $appGradle = $appGradle.Replace('android {', "android {`r`n$debugConfig    buildTypes {`r`n        debug { signingConfig signingConfigs.debug }`r`n    }`r`n")
+if ($appGradle -notmatch 'release \{ signingConfig signingConfigs\.release \}') {
+    $appGradle = $appGradle.Replace('android {', "android {`r`n$releaseSigningConfig    buildTypes {`r`n        release { signingConfig signingConfigs.release }`r`n    }`r`n")
 }
-if ($appGradle -notmatch 'compileSdk 36' -or $appGradle -notmatch 'targetSdk 36' -or $appGradle -notmatch "versionCode $VersionCode" -or $appGradle -notmatch [regex]::Escape("versionName '$VersionName'") -or $appGradle -notmatch 'weeklyDebugStoreFile') { throw "Generated Gradle project did not accept weekly Android configuration" }
+if ($appGradle -notmatch 'compileSdk 36' -or $appGradle -notmatch 'targetSdk 36' -or $appGradle -notmatch "versionCode $VersionCode" -or $appGradle -notmatch [regex]::Escape("versionName '$VersionName'") -or $appGradle -notmatch 'weeklyDebugStoreFile' -or $appGradle -notmatch '(?s)signingConfigs\s*\{\s*release\s*\{.*?weeklyDebugSigningAvailable' -or $appGradle -notmatch 'release \{ signingConfig signingConfigs\.release \}') { throw "Generated Gradle project did not accept weekly Android release configuration" }
 [IO.File]::WriteAllText($appGradlePath, $appGradle, [Text.UTF8Encoding]::new($false))
 
 $apksigner = Join-Path $androidSdk "build-tools/36.0.0/apksigner.bat"
 if (-not (Test-Path -LiteralPath $apksigner -PathType Leaf)) { throw "Pinned Android build tools are missing apksigner: $apksigner" }
 Push-Location (Join-Path $projectRoot "$packageOutput/android")
 try {
-    & $gradle ':app:assembleDebug' '--no-daemon' '--max-workers=2' '--console=plain'
+    & $gradle ':app:assembleRelease' '--no-daemon' '--max-workers=2' '--console=plain'
     if ($LASTEXITCODE -ne 0) { throw "Gradle Android build failed with exit code $LASTEXITCODE" }
 } finally { Pop-Location }
 
-$generatedApk = Join-Path $androidRoot "app/build/outputs/apk/debug/app-debug.apk"
+$generatedApk = Join-Path $androidRoot "app/build/outputs/apk/release/app-release.apk"
 $artifact = Join-Path $projectRoot "toddler-match-$VersionName-android-arm64.apk"
 if (-not (Test-Path -LiteralPath $generatedApk -PathType Leaf) -or (Get-Item -LiteralPath $generatedApk).Length -le 0) { throw "Gradle did not produce a non-empty APK" }
 Copy-Item -LiteralPath $generatedApk -Destination $artifact -Force
