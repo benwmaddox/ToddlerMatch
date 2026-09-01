@@ -1,0 +1,363 @@
+import "/vendor/stasis/stdlib/stdlib.stasis";
+
+const LOGICAL_WIDTH: i32 = 900;
+const LOGICAL_HEIGHT: i32 = 2000;
+const MAX_OPTIONS: i32 = 9;
+const SCREEN_LEVELS: i32 = 0;
+const SCREEN_PLAY: i32 = 1;
+const PHASE_ACTIVE: i32 = 0;
+const PHASE_WON: i32 = 1;
+const PHASE_PROMPT_FADE: i32 = 2;
+const GOAL_COLOR: i32 = 0;
+const GOAL_SHAPE: i32 = 1;
+const GOAL_NUMBER: i32 = 2;
+const WIN_TICKS: i32 = 300;
+const PROMPT_FADE_TICKS: i32 = 60;
+const SHAKE_TICKS: i32 = 10;
+const AUDIO_NONE: i32 = 0;
+const AUDIO_CORRECT: i32 = 1;
+const AUDIO_WRONG: i32 = 2;
+const AUDIO_WIN: i32 = 3;
+const AUDIO_PROMPT: i32 = 4;
+
+struct Card {
+    number: i32;
+    shape: i32;
+    color: i32;
+    matched: bool;
+}
+
+struct MatchState {
+    screen: i32;
+    phase: i32;
+    level: i32;
+    max_number: i32;
+    color_count: i32;
+    shape_count: i32;
+    option_count: i32;
+    shuffle_on_mistake: bool;
+    target: Card;
+    goal: i32;
+    options: Card[9];
+    matches_remaining: i32;
+    rng_state: i32;
+    tick_count: i32;
+    phase_ticks: i32;
+    shake_index: i32;
+    shake_ticks: i32;
+    shuffle_revision: i32;
+    prompt_replays: i32;
+    rounds_completed: i32;
+    audio_event: i32;
+    audio_event_revision: i32;
+    pointer_consumed_count: i32;
+}
+
+global game: MatchState;
+
+function reset_game(seed: i32): void {
+    game.screen = SCREEN_LEVELS;
+    game.phase = PHASE_ACTIVE;
+    game.level = 1;
+    game.max_number = 6;
+    game.color_count = 4;
+    game.shape_count = 5;
+    game.option_count = 6;
+    game.shuffle_on_mistake = false;
+    game.matches_remaining = 0;
+    game.goal = GOAL_COLOR;
+    game.rng_state = seed;
+    if (game.rng_state <= 0) {
+        game.rng_state = 1;
+    }
+    game.tick_count = 0;
+    game.phase_ticks = 0;
+    game.shake_index = -1;
+    game.shake_ticks = 0;
+    game.shuffle_revision = 0;
+    game.prompt_replays = 0;
+    game.rounds_completed = 0;
+    game.audio_event = AUDIO_NONE;
+    game.audio_event_revision = 0;
+    game.pointer_consumed_count = 0;
+}
+
+function next_random(limit: i32): i32 {
+    game.rng_state =(game.rng_state * 25173 + 13849) % 65536;
+    if (game.rng_state < 0) {
+        game.rng_state = -game.rng_state;
+    }
+    if (limit <= 1) {
+        return 0;
+    }
+    return game.rng_state % limit;
+}
+
+function configure_level(level: i32): void {
+    if (level < 1 || level > 4) {
+        level = 1;
+    }
+    game.level = level;
+    game.max_number = 6;
+    game.color_count = 4;
+    game.shape_count = 5;
+    game.option_count = 6;
+    game.shuffle_on_mistake = false;
+    if (level >= 2) {
+        game.shuffle_on_mistake = true;
+    }
+    if (level >= 3) {
+        game.max_number = 15;
+        game.color_count = 5;
+        game.shape_count = 6;
+    }
+    if (level == 4) {
+        game.option_count = 9;
+    }
+}
+
+function randomize_target(): void {
+    game.target.number = next_random(game.max_number) + 1;
+    game.target.shape = next_random(game.shape_count);
+    game.target.color = next_random(game.color_count);
+    game.target.matched = false;
+}
+
+function randomize_option(index: i32): void {
+    game.options[index].number = next_random(game.max_number) + 1;
+    game.options[index].shape = next_random(game.shape_count);
+    game.options[index].color = next_random(game.color_count);
+    game.options[index].matched = false;
+}
+
+function card_matches(a: Card, b: Card, goal: i32): bool {
+    if (goal == GOAL_COLOR) {
+        return a.color == b.color;
+    }
+    if (goal == GOAL_SHAPE) {
+        return a.shape == b.shape;
+    }
+    return a.number == b.number;
+}
+
+function option_matches_target(index: i32): bool {
+    if (game.goal == GOAL_COLOR) {
+        return game.options[index].color == game.target.color;
+    }
+    if (game.goal == GOAL_SHAPE) {
+        return game.options[index].shape == game.target.shape;
+    }
+    return game.options[index].number == game.target.number;
+}
+
+function generate_round(): void {
+    game.phase = PHASE_ACTIVE;
+    game.phase_ticks = 0;
+    game.shake_index = -1;
+    game.shake_ticks = 0;
+    randomize_target();
+    game.goal = next_random(3);
+    game.target.matched = false;
+    game.matches_remaining = 0;
+    let i: i32 = 0;
+    for (i = 0; i < game.option_count; i = i + 1) {
+        randomize_option(i);
+        if (i == game.option_count - 1 && game.matches_remaining == 0) {
+            if (game.goal == GOAL_COLOR) {
+                game.options[i].color = game.target.color;
+            } else if (game.goal == GOAL_SHAPE) {
+                game.options[i].shape = game.target.shape;
+            } else {
+                game.options[i].number = game.target.number;
+            }
+        }
+        if (option_matches_target(i)) {
+            game.matches_remaining = game.matches_remaining + 1;
+        }
+    }
+    for (i = game.option_count; i < MAX_OPTIONS; i = i + 1) {
+        game.options[i].number = 0;
+        game.options[i].shape = 0;
+        game.options[i].color = 0;
+        game.options[i].matched = true;
+    }
+}
+
+function current_goal(): i32 {
+    return game.goal;
+}
+
+function target_shape(): i32 {
+    return game.target.shape;
+}
+
+function emit_audio(event_kind: i32): void {
+    game.audio_event = event_kind;
+    game.audio_event_revision = game.audio_event_revision + 1;
+}
+
+function start_level(level: i32): void {
+    configure_level(level);
+    game.screen = SCREEN_PLAY;
+    generate_round();
+    emit_audio(AUDIO_PROMPT);
+}
+
+function shuffle_unmatched(): void {
+    let remaining: i32[9];
+    let count: i32 = 0;
+    let i: i32 = 0;
+    for (i = 0; i < game.option_count; i = i + 1) {
+        if (!game.options[i].matched) {
+            remaining[count] = i;
+            count = count + 1;
+        }
+    }
+    if (count < 2) {
+        return;
+    }
+    let j: i32 = count - 1;
+    for (j = count - 1; j > 0; j = j - 1) {
+        let swap_position: i32 = next_random(j + 1);
+        let left: i32 = remaining[j];
+        let right: i32 = remaining[swap_position];
+        let temporary_number: i32 = game.options[left].number;
+        let temporary_shape: i32 = game.options[left].shape;
+        let temporary_color: i32 = game.options[left].color;
+        let temporary_matched: bool = game.options[left].matched;
+        game.options[left].number = game.options[right].number;
+        game.options[left].shape = game.options[right].shape;
+        game.options[left].color = game.options[right].color;
+        game.options[left].matched = game.options[right].matched;
+        game.options[right].number = temporary_number;
+        game.options[right].shape = temporary_shape;
+        game.options[right].color = temporary_color;
+        game.options[right].matched = temporary_matched;
+    }
+    game.shuffle_revision = game.shuffle_revision + 1;
+}
+
+function choose_option(index: i32): bool {
+    if (game.screen != SCREEN_PLAY || game.phase != PHASE_ACTIVE) {
+        return false;
+    }
+    if (index < 0 || index >= game.option_count || game.options[index].matched) {
+        return false;
+    }
+    if (option_matches_target(index)) {
+        game.options[index].matched = true;
+        game.matches_remaining = game.matches_remaining - 1;
+        emit_audio(AUDIO_CORRECT);
+        if (game.matches_remaining <= 0) {
+            game.matches_remaining = 0;
+            game.phase = PHASE_WON;
+            game.phase_ticks = 0;
+            game.rounds_completed = game.rounds_completed + 1;
+            emit_audio(AUDIO_WIN);
+        }
+        return true;
+    }
+    emit_audio(AUDIO_WRONG);
+    if (game.shuffle_on_mistake) {
+        shuffle_unmatched();
+    } else {
+        game.shake_index = index;
+        game.shake_ticks = SHAKE_TICKS;
+    }
+    return false;
+}
+
+function replay_prompt(): void {
+    if (game.screen == SCREEN_PLAY && game.phase == PHASE_ACTIVE) {
+        game.prompt_replays = game.prompt_replays + 1;
+        emit_audio(AUDIO_PROMPT);
+    }
+}
+
+function advance_game_tick(): void {
+    game.tick_count = game.tick_count + 1;
+    if (game.shake_ticks > 0) {
+        game.shake_ticks = game.shake_ticks - 1;
+        if (game.shake_ticks == 0) {
+            game.shake_index = -1;
+        }
+    }
+    if (game.phase == PHASE_WON) {
+        game.phase_ticks = game.phase_ticks + 1;
+        if (game.phase_ticks >= WIN_TICKS) {
+            game.phase = PHASE_PROMPT_FADE;
+            game.phase_ticks = 0;
+            generate_round();
+            game.phase = PHASE_PROMPT_FADE;
+            emit_audio(AUDIO_PROMPT);
+        }
+    } else if (game.phase == PHASE_PROMPT_FADE) {
+        game.phase_ticks = game.phase_ticks + 1;
+        if (game.phase_ticks >= PROMPT_FADE_TICKS) {
+            game.phase = PHASE_ACTIVE;
+            game.phase_ticks = 0;
+        }
+    }
+}
+
+function point_in_rect(px: f32, py: f32, x: f32, y: f32, w: f32, h: f32): bool {
+    return px >= x && px <= x + w && py >= y && py <= y + h;
+}
+
+function option_x(index: i32): f32 {
+    let column: i32 = index % 3;
+    if (game.option_count == 9) {
+        return 54.0 + i32_to_f32(column) * 276.0;
+    }
+    return 54.0 + i32_to_f32(column) * 276.0;
+}
+
+function option_y(index: i32): f32 {
+    let row: i32 = index / 3;
+    if (game.option_count == 9) {
+        return 960.0 + i32_to_f32(row) * 286.0;
+    }
+    return 1030.0 + i32_to_f32(row) * 360.0;
+}
+
+function option_w(): f32 {
+    return 240.0;
+}
+
+function option_h(): f32 {
+    if (game.option_count == 9) {
+        return 250.0;
+    }
+    return 320.0;
+}
+
+function option_at(px: f32, py: f32): i32 {
+    let i: i32 = 0;
+    for (i = 0; i < game.option_count; i = i + 1) {
+        if (point_in_rect(px, py, option_x(i), option_y(i), option_w(), option_h())) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+function map_pointer_axis(pixel: f32, viewport: f32, logical: f32): f32 {
+    if (viewport <= 0.0) {
+        return 0.0;
+    }
+    let mapped: f32 = pixel * logical / viewport;
+    if (mapped < 0.0) {
+        return 0.0;
+    }
+    if (mapped > logical) {
+        return logical;
+    }
+    return mapped;
+}
+
+function logical_to_viewport_axis(logical_position: f32, viewport: f32, logical: f32): f32 {
+    if (logical <= 0.0) {
+        return 0.0;
+    }
+    return logical_position * viewport / logical;
+}

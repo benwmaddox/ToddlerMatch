@@ -1,0 +1,10 @@
+{
+  "optimizer": "toddler-match-vector-canonicalizer",
+  "version": "1.0.0",
+  "numeric_precision": 2,
+  "remove_xml_declaration": true,
+  "remove_comments": true,
+  "collapse_intertag_whitespace": true,
+  "forbidden_elements": ["script", "style", "text", "image", "foreignObject", "filter", "mask", "pattern", "animate", "animateTransform"],
+  "forbid_external_references": true
+}

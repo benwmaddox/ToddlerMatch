@@ -1,0 +1,56 @@
+name: PR validation
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: toddler-match-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  exact-head:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Verify exact head
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+      - name: Diff hygiene
+        shell: bash
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          if [[ -z "${base}" ]]; then base="HEAD^"; fi
+          git diff --check "${base}" HEAD
+      - name: Install WebAssembly optimizer
+        run: sudo apt-get update && sudo apt-get install --yes binaryen
+      - name: Restore pinned Stasis release
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-linux-x64.tar.gz -ReleaseTag nightly-20260831-270
+      - name: Validate source, assets, and Web package
+        shell: bash
+        run: |
+          set -euo pipefail
+          stasis="${PWD}/.release-toolchain/bin/stasis"
+          pwsh ./tools/promote-vector-assets.ps1 -Check
+          "${stasis}" vendor status --workspace "${PWD}"
+          "${stasis}" fmt --check
+          "${stasis}" check
+          "${stasis}" test
+          rm -rf dist/pr-web .stasis_cache
+          "${stasis}" package --target web --out dist/pr-web
+          test -f dist/pr-web/index.html
+          test -f dist/pr-web/game.wasm
+      - name: Verify validation did not mutate project sources
+        run: |
+          git diff --check -- .github assets docs src tests tools stasis.json
+          git diff --exit-code -- .github assets docs src tests tools stasis.json

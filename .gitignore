@@ -1,0 +1,9 @@
+/vendor/stasis/docs/
+/.release-toolchain/
+/.stasis_cache/
+/.playwright-cli/
+/build/
+/dist/
+/output/
+/*.pid
+/*.apk

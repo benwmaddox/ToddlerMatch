@@ -1,0 +1,6 @@
+{
+  "[stasis]": {
+    "editor.defaultFormatter": "stasislang.stasis",
+    "editor.formatOnSave": true
+  }
+}
