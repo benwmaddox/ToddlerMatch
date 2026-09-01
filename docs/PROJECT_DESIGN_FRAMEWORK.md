@@ -8,7 +8,7 @@ project:
   translation_intent: reference-faithful
   reference_fidelity_targets: Preserve the HTML game's six silhouettes, four/five-color identity, target-over-options hierarchy, high-contrast white cards, chunky shadows, and single-rule prompts.
   mockup_reference: The original 520px portrait HTML experience at MaddoxLabs src/toddler-games/match/index.html; it is behavior/design evidence only and is never shipped or embedded.
-  accepted_mockup_evidence: docs/evidence/reference/index.html.sha256 records the upstream source hash; baseline captures are stored under docs/evidence/reference.
+  source_behavior_provenance: The original MaddoxLabs HTML game defines the behavior and design baseline; this repository preserves that mapping in this framework and in the deterministic game model and tests.
   component_inventory:
     - owner: assets/shapes/<shape>-<color>.svg
       source_route: vector-origin from the existing inline SVG geometry
@@ -67,7 +67,7 @@ project:
     - Use only declared palette roles and transparent canvases.
   exclusions: [emoji, system-font-dependent identity, raster screen mockups, filters, masks, scripts, text in SVG, external references]
   reference_anchors: [circle r40, square 70x70, triangle 50/10-90/85-10/85, original hexagon/star point sets, original curvy cubic path]
-  scene_comparison_gate: Compare raw/canonical renders on white and #263238 backgrounds at 48, 112, and 224 logical pixels; then inspect real-engine 900x2000 and desktop captures.
+  scene_comparison_gate: Render canonical assets on white and #263238 backgrounds at 48, 112, and 224 logical pixels; then exercise the real engine at its 900x2000 logical size and fitted desktop presentation.
 ```
 
 Every item uses `runtime_representation: svg_direct`, `stored_display_sizes: 100x100 SVG`, and `translation_intent: reference-faithful`. Shape anchors are centered; card collision and hit geometry are deliberately runtime-owned. The canonical asset is loaded once per color/shape pair into a bounded 30-sprite cache and rasterized by Stasis at the declared logical size/device density.

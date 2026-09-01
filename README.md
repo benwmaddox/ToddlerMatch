@@ -27,7 +27,7 @@ stasis package-mobile --target android-arm64 --out dist/android
 
 `src/game.stasis` owns deterministic model, level generation, matching, shuffle, progression, input geometry, and audio events. `src/main.stasis` owns host input binding, bounded procedural audio presentation, the 33-entry SVG cache, and rendering. Rendering never advances gameplay.
 
-The project design framework, source behavior map, baseline/final captures, asset provenance, defect log, and independent visual review live under `docs/`.
+The project design framework under `docs/` records the source behavior map, design provenance, asset contracts, and runtime ownership boundaries.
 
 ## Releases
 
