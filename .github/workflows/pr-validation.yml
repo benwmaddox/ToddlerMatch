@@ -42,7 +42,9 @@ jobs:
           set -euo pipefail
           stasis="${PWD}/.release-toolchain/bin/stasis"
           pwsh ./tools/promote-vector-assets.ps1 -Check
-          "${stasis}" vendor status --workspace "${PWD}"
+          vendor_status="$("${stasis}" vendor status --workspace "${PWD}")"
+          echo "${vendor_status}"
+          grep -F "Stasis vendor is current" <<<"${vendor_status}"
           "${stasis}" fmt --check
           "${stasis}" check
           "${stasis}" test

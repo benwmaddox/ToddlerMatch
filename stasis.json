@@ -7,7 +7,7 @@
   "vendor": {
     "stasis": {
       "release_id": "nightly-20260831-270",
-      "sha256": "0796f6b89883c2f578c5618e9b6c53427a3b34e9887e3b59866d9b5fc4d5ed89"
+      "sha256": "a28bf5e47f20ea481f3519b6d71b92e628c9aa67f2139560d5893d63288251a5"
     }
   },
   "android": {

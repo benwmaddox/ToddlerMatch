@@ -8,3 +8,4 @@
 - `defect-log.md`: first-capture rejection and corrected final evidence.
 - `visual-review.md`: independent severity-ranked review.
 - `local-validation.md`: exact local validation and packaging results, including the bounded Windows desktop-toolchain failure.
+- `hosting-state.md`: external publishing prohibition and exact cleanup state.
