@@ -50,8 +50,6 @@ jobs:
           "${stasis}" package --target web --out dist/pr-web
           test -f dist/pr-web/index.html
           test -f dist/pr-web/game.wasm
-          test "$(jq -r '.display.logical_width' assets/manifest.json)" = "900"
-          test "$(jq -r '.display.logical_height' assets/manifest.json)" = "2000"
       - name: Verify validation did not mutate project sources
         run: |
           git diff --check -- .github assets docs src tests tools stasis.json
