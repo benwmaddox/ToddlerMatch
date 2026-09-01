@@ -2,7 +2,7 @@ name: Deploy Web game
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, codex/task-395-stasis-migration]
   workflow_dispatch:
 
 concurrency:
