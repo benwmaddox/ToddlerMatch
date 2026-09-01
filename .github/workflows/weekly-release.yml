@@ -413,4 +413,3 @@ jobs:
             gh release create "${RELEASE_TAG}" release/*.tar.gz release/*.zip release/*.apk release/SHA256SUMS.txt release/BUILD-MANIFEST.json \
               --repo "${GITHUB_REPOSITORY}" --target "${GITHUB_SHA}" --title "Toddler Match ${PRODUCT_VERSION}" --generate-notes --prerelease
           fi
-

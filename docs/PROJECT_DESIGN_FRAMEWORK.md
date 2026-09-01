@@ -71,4 +71,3 @@ project:
 ```
 
 Every item uses `runtime_representation: svg_direct`, `stored_display_sizes: 100x100 SVG`, and `translation_intent: reference-faithful`. Shape anchors are centered; card collision and hit geometry are deliberately runtime-owned. The canonical asset is loaded once per color/shape pair into a bounded 30-sprite cache and rasterized by Stasis at the declared logical size/device density.
-

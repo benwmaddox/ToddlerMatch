@@ -12,4 +12,3 @@ The original MaddoxLabs page chooses one target and one rule (`color`, `shape`, 
 The Stasis migration keeps this loop while replacing browser speech synthesis with an immediate, platform-consistent three-tone prompt motif. Tapping the prompt replays that motif. Dynamic labels and all numbers remain runtime text rendered from the checked-in Basic font.
 
 Theory mapping: pointer-up becomes one bounded intent; deterministic rules update the root state once; audio events are queued from accepted intents; rendering reads state without advancing it. The closest tempting alternative—letting render timers or host randomness decide the next round—would make replay, recreation, and tests diverge. A future fifth level belongs in `configure_level` and the tested generation bounds, not in input or rendering.
-

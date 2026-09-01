@@ -36,4 +36,3 @@ Pull requests restore the pinned toolchain and run formatting, compiler, determi
 ## License
 
 Game code is MIT licensed. `assets/fonts/Basic-Regular.ttf` is licensed separately under SIL OFL 1.1; its source and license are beside the file.
-
