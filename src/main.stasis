@@ -1,0 +1,381 @@
+import "/vendor/stasis/stdlib/stdlib.stasis";
+import "/vendor/stasis/stdlib/graphics.stasis";
+import "/vendor/stasis/stdlib/audio.stasis";
+import "game.stasis";
+
+global ui_font: i32;
+global sprites: Sprite[33];
+global assets_loaded: bool;
+global audio_ready: bool;
+global presented_audio_revision: i32;
+global audio_samples: f32[2048];
+
+function asset_index(shape: i32, color: i32): i32 {
+    return shape * 5 + color;
+}
+
+function load_assets(): void {
+    assets_loaded = true;
+    if (!sprites[0].load_sprite_from("assets/shapes/circle-red.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[1].load_sprite_from("assets/shapes/circle-green.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[2].load_sprite_from("assets/shapes/circle-blue.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[3].load_sprite_from("assets/shapes/circle-yellow.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[4].load_sprite_from("assets/shapes/circle-black.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[5].load_sprite_from("assets/shapes/square-red.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[6].load_sprite_from("assets/shapes/square-green.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[7].load_sprite_from("assets/shapes/square-blue.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[8].load_sprite_from("assets/shapes/square-yellow.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[9].load_sprite_from("assets/shapes/square-black.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[10].load_sprite_from("assets/shapes/triangle-red.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[11].load_sprite_from("assets/shapes/triangle-green.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[12].load_sprite_from("assets/shapes/triangle-blue.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[13].load_sprite_from("assets/shapes/triangle-yellow.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[14].load_sprite_from("assets/shapes/triangle-black.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[15].load_sprite_from("assets/shapes/hexagon-red.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[16].load_sprite_from("assets/shapes/hexagon-green.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[17].load_sprite_from("assets/shapes/hexagon-blue.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[18].load_sprite_from("assets/shapes/hexagon-yellow.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[19].load_sprite_from("assets/shapes/hexagon-black.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[20].load_sprite_from("assets/shapes/star-red.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[21].load_sprite_from("assets/shapes/star-green.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[22].load_sprite_from("assets/shapes/star-blue.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[23].load_sprite_from("assets/shapes/star-yellow.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[24].load_sprite_from("assets/shapes/star-black.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[25].load_sprite_from("assets/shapes/curvy-red.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[26].load_sprite_from("assets/shapes/curvy-green.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[27].load_sprite_from("assets/shapes/curvy-blue.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[28].load_sprite_from("assets/shapes/curvy-yellow.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[29].load_sprite_from("assets/shapes/curvy-black.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[30].load_sprite_from("assets/goals/color.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[31].load_sprite_from("assets/goals/shape.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+    if (!sprites[32].load_sprite_from("assets/goals/number.svg", 100, 100)) {
+        assets_loaded = false;
+    }
+}
+
+function ensure_audio(): void {
+    if (!audio_ready) {
+        audio_ready = audio_init(48000, 1, 2048);
+    }
+}
+
+function tone_sample(phase: i32, period: i32, amplitude: f32): f32 {
+    if (period <= 1) {
+        return 0.0;
+    }
+    if ((phase % period) < period / 2) {
+        return amplitude;
+    }
+    return -amplitude;
+}
+
+function present_audio_event(): void {
+    if (presented_audio_revision == game.audio_event_revision) {
+        return;
+    }
+    ensure_audio();
+    presented_audio_revision = game.audio_event_revision;
+    if (!audio_ready) {
+        return;
+    }
+    let i: i32 = 0;
+    for (i = 0; i < 2048; i = i + 1) {
+        let envelope: f32 = i32_to_f32(2048 - i) / 2048.0;
+        let sample: f32 = 0.0;
+        if (game.audio_event == AUDIO_CORRECT) {
+            sample = tone_sample(i, 80, 0.10) * envelope;
+        } else if (game.audio_event == AUDIO_WRONG) {
+            sample = tone_sample(i, 240, 0.055) * envelope;
+        } else if (game.audio_event == AUDIO_PROMPT) {
+            sample = tone_sample(i, 160, 0.045) * envelope;
+        } else if (game.audio_event == AUDIO_WIN) {
+            if (i < 682) {
+                sample = tone_sample(i, 92, 0.08);
+            } else if (i < 1365) {
+                sample = tone_sample(i, 73, 0.08);
+            } else {
+                sample = tone_sample(i, 61, 0.08);
+            }
+            sample = sample * envelope;
+        }
+        audio_samples[i] = sample;
+    }
+    audio_push_f32_interleaved(audio_samples, 2048);
+}
+
+function main(): i32 {
+    reset_game(395);
+    init_window(LOGICAL_WIDTH, LOGICAL_HEIGHT, "Toddler Match");
+    ui_font = load_font("assets/fonts/Basic-Regular.ttf", 48);
+    load_assets();
+    audio_ready = false;
+    presented_audio_revision = 0;
+    return 0;
+}
+
+function handle_pointer(px: f32, py: f32): void {
+    game.pointer_consumed_count = game.pointer_consumed_count + 1;
+    ensure_audio();
+    if (game.screen == SCREEN_LEVELS) {
+        let level: i32 = 0;
+        for (level = 1; level <= 4; level = level + 1) {
+            if (point_in_rect(px, py, 80.0, 500.0 + i32_to_f32(level - 1) * 310.0, 740.0, 250.0)) {
+                start_level(level);
+                return;
+            }
+        }
+        return;
+    }
+    if (point_in_rect(px, py, 190.0, 680.0, 520.0, 180.0)) {
+        replay_prompt();
+        return;
+    }
+    let selected: i32 = option_at(px, py);
+    if (selected >= 0) {
+        choose_option(selected);
+    }
+}
+
+function @effects(game, audio, audio_ready, presented_audio_revision, audio_samples) tick(): i32 {
+    if (input_pointer_count() > 0 && input_pointer_went_up(0)) {
+        handle_pointer(input_pointer_x_logical(0), input_pointer_y_logical(0));
+    }
+    advance_game_tick();
+    present_audio_event();
+    return 0;
+}
+
+function draw_text(font: i32, text: string, x: f32, y: f32, r: f32, g: f32, b: f32, a: f32): void {
+    gfx_cmd_text(font, text, x, y, r, g, b, a);
+}
+
+function number_text(value: i32): string {
+    if (value == 0) {
+        return "0";
+    }
+    if (value == 1) {
+        return "1";
+    }
+    if (value == 2) {
+        return "2";
+    }
+    if (value == 3) {
+        return "3";
+    }
+    if (value == 4) {
+        return "4";
+    }
+    if (value == 5) {
+        return "5";
+    }
+    if (value == 6) {
+        return "6";
+    }
+    if (value == 7) {
+        return "7";
+    }
+    if (value == 8) {
+        return "8";
+    }
+    if (value == 9) {
+        return "9";
+    }
+    if (value == 10) {
+        return "10";
+    }
+    if (value == 11) {
+        return "11";
+    }
+    if (value == 12) {
+        return "12";
+    }
+    if (value == 13) {
+        return "13";
+    }
+    if (value == 14) {
+        return "14";
+    }
+    return "15";
+}
+
+function draw_card(number: i32, shape: i32, color: i32, x: f32, y: f32, w: f32, h: f32, alpha: f32): void {
+    fill_rect(x + 8.0, y + 12.0, w, h, 0.78, 0.82, 0.85, alpha);
+    fill_rect(x, y, w, h, 1.0, 1.0, 1.0, alpha);
+    let size: f32 = 0.0;
+    if (game.option_count == 9) {
+        size = 116.0;
+    } else {
+        size = 150.0;
+    }
+    let sx: f32 = x +(w - size) * 0.5;
+    let sy: f32 = y + h - size - 24.0;
+    if (shape >= 0 && shape < 6 && color >= 0 && color < 5) {
+        gfx_cmd_sprite(sprites[asset_index(shape, color)].handle, sx, sy, size, size, 0, f32_to_i32(alpha * 255.0));
+    }
+    if (number < 10) {
+        draw_text(ui_font, number_text(number), x + w * 0.43, y + 34.0, 0.15, 0.20, 0.22, alpha);
+    } else {
+        draw_text(ui_font, number_text(number), x + w * 0.34, y + 34.0, 0.15, 0.20, 0.22, alpha);
+    }
+}
+
+function draw_levels(): void {
+    draw_text(ui_font, "TODDLER MATCH", 245.0, 230.0, 0.15, 0.20, 0.22, 1.0);
+    draw_text(ui_font, "CHOOSE A LEVEL", 270.0, 330.0, 0.27, 0.35, 0.39, 1.0);
+    let level: i32 = 1;
+    for (level = 1; level <= 4; level = level + 1) {
+        let y: f32 = 500.0 + i32_to_f32(level - 1) * 310.0;
+        fill_rect(88.0, y + 12.0, 740.0, 250.0, 0.78, 0.82, 0.85, 1.0);
+        fill_rect(80.0, y, 740.0, 250.0, 1.0, 1.0, 1.0, 1.0);
+        draw_text(ui_font, "LEVEL", 130.0, y + 42.0, 0.15, 0.20, 0.22, 1.0);
+        draw_text(ui_font, number_text(level), 310.0, y + 42.0, 0.15, 0.20, 0.22, 1.0);
+        if (level == 1) {
+            draw_text(ui_font, "START HERE", 130.0, y + 120.0, 0.13, 0.42, 0.63, 1.0);
+        } else if (level == 2) {
+            draw_text(ui_font, "SHUFFLE MISTAKES", 130.0, y + 120.0, 0.13, 0.42, 0.63, 1.0);
+        } else if (level == 3) {
+            draw_text(ui_font, "EXTRA OPTIONS", 130.0, y + 120.0, 0.13, 0.42, 0.63, 1.0);
+        } else {
+            draw_text(ui_font, "NINE CHOICES", 130.0, y + 120.0, 0.13, 0.42, 0.63, 1.0);
+        }
+    }
+}
+
+function draw_play(): void {
+    draw_text(ui_font, "LEVEL", 60.0, 58.0, 0.15, 0.20, 0.22, 1.0);
+    draw_text(ui_font, number_text(game.level), 240.0, 58.0, 0.15, 0.20, 0.22, 1.0);
+    let prompt_alpha: f32 = 1.0;
+    if (game.phase == PHASE_WON) {
+        prompt_alpha = 0.15;
+    } else if (game.phase == PHASE_PROMPT_FADE) {
+        prompt_alpha = i32_to_f32(game.phase_ticks) / i32_to_f32(PROMPT_FADE_TICKS);
+    }
+    draw_card(game.target.number, game.target.shape, game.target.color, 330.0, 230.0, 240.0, 330.0, prompt_alpha);
+    fill_rect(190.0, 680.0, 520.0, 180.0, 1.0, 1.0, 1.0, prompt_alpha);
+    gfx_cmd_sprite(sprites[30 + current_goal()].handle, 225.0, 720.0, 100.0, 100.0, 0, f32_to_i32(prompt_alpha * 255.0));
+    if (current_goal() == GOAL_COLOR) {
+        draw_text(ui_font, "MATCH COLOR", 350.0, 735.0, 0.15, 0.20, 0.22, prompt_alpha);
+    } else if (current_goal() == GOAL_SHAPE) {
+        draw_text(ui_font, "MATCH SHAPE", 350.0, 735.0, 0.15, 0.20, 0.22, prompt_alpha);
+    } else {
+        draw_text(ui_font, "MATCH NUMBER", 335.0, 735.0, 0.15, 0.20, 0.22, prompt_alpha);
+    }
+    let i: i32 = 0;
+    for (i = 0; i < game.option_count; i = i + 1) {
+        let alpha: f32 = 1.0;
+        if (game.options[i].matched) {
+            alpha = 0.18;
+        }
+        if (game.phase == PHASE_WON) {
+            let delay: i32 = i * 5;
+            if (game.phase_ticks > delay) {
+                alpha = 1.0 - i32_to_f32(game.phase_ticks - delay) / 100.0;
+            }
+            if (alpha < 0.0) {
+                alpha = 0.0;
+            }
+        }
+        let x: f32 = option_x(i);
+        if (game.shake_index == i && game.shake_ticks > 0) {
+            if ((game.shake_ticks % 4) < 2) {
+                x = x + 18.0;
+            } else {
+                x = x - 18.0;
+            }
+        }
+        draw_card(
+            game.options[i].number,
+            game.options[i].shape,
+            game.options[i].color,
+            x,
+            option_y(i),
+            option_w(),
+            option_h(),
+            alpha
+        );
+    }
+    if (game.phase == PHASE_WON) {
+        draw_text(ui_font, "GREAT JOB!", 310.0, 1820.0, 0.12, 0.55, 0.25, 1.0);
+        draw_text(ui_font, "NEXT SOON", 330.0, 1890.0, 0.27, 0.35, 0.39, 1.0);
+    }
+}
+
+function @effects(graphics, memory) render(): i32 {
+    begin_frame();
+    clear(0.94, 0.96, 0.97, 1.0);
+    if (game.screen == SCREEN_LEVELS) {
+        draw_levels();
+    } else {
+        draw_play();
+    }
+    end_frame();
+    return 0;
+}
+
+function on_code_swap(): void {
+    load_assets();
+}

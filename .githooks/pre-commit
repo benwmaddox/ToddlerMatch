@@ -1,0 +1,29 @@
+#!/bin/sh
+set -eu
+
+if [ -n "${STASIS_BIN:-}" ]; then
+    stasis_cmd="$STASIS_BIN"
+else
+    stasis_cmd="$(command -v stasis || true)"
+fi
+
+if [ -z "$stasis_cmd" ] || [ ! -x "$stasis_cmd" ]; then
+    echo "Commit blocked: stasis is not available on PATH; install Stasis and run 'stasis format'." >&2
+    exit 1
+fi
+
+echo "Stasis pre-commit: checking canonical source format"
+if ! "$stasis_cmd" format --check; then
+    echo "Stasis pre-commit: formatting source before blocking this commit"
+    if ! "$stasis_cmd" format; then
+        echo "Commit blocked: 'stasis format' failed." >&2
+        exit 1
+    fi
+    echo "Commit blocked: review and stage the formatting changes, then commit again." >&2
+    exit 1
+fi
+
+if ! git diff --quiet -- ':(glob)**/*.stasis'; then
+    echo "Commit blocked: stage the formatted Stasis changes, then commit again." >&2
+    exit 1
+fi

@@ -1,0 +1,416 @@
+name: Weekly release builds
+
+on:
+  schedule:
+    # 13:17 UTC is 9:17 EDT / 8:17 EST on Friday morning.
+    - cron: "17 13 * * 5"
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: Build and publish even when the weekly baseline is unchanged
+        required: true
+        default: true
+        type: boolean
+  pull_request:
+    paths:
+      - ".github/workflows/weekly-release.yml"
+      - "assets/**"
+      - "src/**"
+      - "tests/**"
+      - "tools/**"
+      - "vendor/stasis/**"
+      - "stasis.json"
+
+concurrency:
+  group: toddler-match-weekly-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.metadata.outputs.should_build }}
+      previous_source_commit: ${{ steps.metadata.outputs.previous_source_commit }}
+      stasis_release: ${{ steps.metadata.outputs.stasis_release }}
+      product_version: ${{ steps.metadata.outputs.product_version }}
+      release_tag: ${{ steps.metadata.outputs.release_tag }}
+      source_compare_url: ${{ steps.metadata.outputs.source_compare_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve complete immutable Stasis nightly
+        id: nightly
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = (./tools/resolve-stasis-nightly.ps1 | Out-String).Trim()
+          if ([string]::IsNullOrWhiteSpace($tag)) { throw "Unable to resolve a complete Stasis nightly" }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Audit canonical vector assets
+        shell: pwsh
+        run: ./tools/promote-vector-assets.ps1 -Check
+
+      - name: Determine weekly baseline and immutable build metadata
+        id: metadata
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          FORCE_BUILD: ${{ inputs.force_build }}
+          NIGHTLY_TAG: ${{ steps.nightly.outputs.tag }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $buildPaths = @(
+            ".github/workflows/weekly-release.yml",
+            "assets",
+            "src",
+            "tests",
+            "tools",
+            "vendor/stasis",
+            "stasis.json"
+          )
+          $event = $env:EVENT_NAME
+          $forceRequested = $event -eq "workflow_dispatch" -and $env:FORCE_BUILD -eq "true"
+          $shouldBuild = $event -eq "pull_request" -or $forceRequested
+          $previousSource = ""
+          $previousStasis = ""
+          $compareUrl = ""
+          $baselineAvailable = $false
+
+          if ($event -ne "pull_request") {
+            $releaseJson = gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "/repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+            if ($LASTEXITCODE -ne 0) { throw "Unable to query published weekly releases" }
+            $releaseResponse = ($releaseJson -join [Environment]::NewLine) | ConvertFrom-Json
+            $releases = if ($releaseResponse -is [Array]) { @($releaseResponse.GetEnumerator()) } else { @($releaseResponse) }
+            $baseline = @($releases | Where-Object { -not $_.draft -and [string]($_.tag_name) -match '^weekly-' } | Sort-Object -Property @{ Expression = { [DateTimeOffset]($_.published_at) }; Descending = $true } | Select-Object -First 1)
+            if ($baseline.Count -eq 1) {
+              $baselineDir = Join-Path $env:RUNNER_TEMP "toddler-match-weekly-baseline"
+              Remove-Item -LiteralPath $baselineDir -Recurse -Force -ErrorAction SilentlyContinue
+              New-Item -ItemType Directory -Path $baselineDir -Force | Out-Null
+              & gh release download ([string]($baseline[0].tag_name)) --repo $env:GITHUB_REPOSITORY --pattern BUILD-MANIFEST.json --dir $baselineDir --clobber
+              if ($LASTEXITCODE -eq 0) {
+                $manifests = @(Get-ChildItem -LiteralPath $baselineDir -Filter BUILD-MANIFEST.json -File)
+                if ($manifests.Count -eq 1) {
+                  try {
+                    $manifest = Get-Content -LiteralPath $manifests[0].FullName -Raw | ConvertFrom-Json
+                    $candidateSource = [string]($manifest.source_commit)
+                    $candidateStasis = [string]($manifest.stasis_release)
+                    & git cat-file -e "$candidateSource^{commit}" 2>$null
+                    if ($LASTEXITCODE -eq 0 -and $candidateSource -match '^[0-9a-fA-F]{7,40}$' -and -not [string]::IsNullOrWhiteSpace($candidateStasis)) {
+                      $previousSource = $candidateSource
+                      $previousStasis = $candidateStasis
+                      $baselineAvailable = $true
+                    }
+                  } catch { Write-Warning "Weekly baseline manifest was unreadable; rebuilding conservatively." }
+                }
+              } else { Write-Warning "Weekly baseline manifest was unavailable; rebuilding conservatively." }
+              Remove-Item -LiteralPath $baselineDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            if ($baselineAvailable) {
+              $changed = @(git diff --name-only $previousSource $env:GITHUB_SHA -- $buildPaths)
+              if ($LASTEXITCODE -ne 0) { throw "Unable to compare weekly source baseline $previousSource with $env:GITHUB_SHA" }
+              $sourceChanged = $changed.Count -gt 0
+              $stasisChanged = $previousStasis -ne $env:NIGHTLY_TAG
+              $shouldBuild = $forceRequested -or $sourceChanged -or $stasisChanged
+              $compareUrl = "https://github.com/$env:GITHUB_REPOSITORY/compare/$previousSource...$env:GITHUB_SHA"
+            } else { $shouldBuild = $true }
+          }
+          $project = Get-Content stasis.json -Raw | ConvertFrom-Json
+          $baseVersion = [string]($project.android.version_name)
+          if ([string]::IsNullOrWhiteSpace($baseVersion)) { throw "stasis.json has no android.version_name base version" }
+          $productVersion = "$baseVersion-weekly.$env:RUN_NUMBER"
+          $releaseTag = "weekly-$((Get-Date).ToUniversalTime().ToString('yyyyMMdd'))-$env:RUN_NUMBER"
+          "should_build=$($shouldBuild.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "previous_source_commit=$previousSource" >> $env:GITHUB_OUTPUT
+          "stasis_release=$env:NIGHTLY_TAG" >> $env:GITHUB_OUTPUT
+          "product_version=$productVersion" >> $env:GITHUB_OUTPUT
+          "release_tag=$releaseTag" >> $env:GITHUB_OUTPUT
+          "source_compare_url=$compareUrl" >> $env:GITHUB_OUTPUT
+          if ($shouldBuild) { "Build required: source, Stasis, first-run, or forced manual build." >> $env:GITHUB_STEP_SUMMARY }
+          else { "No build-relevant source or Stasis changes since the latest published weekly release; build skipped." >> $env:GITHUB_STEP_SUMMARY }
+
+  pr-validation:
+    needs: metadata
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install web packaging optimizer
+        run: sudo apt-get update && sudo apt-get install --yes binaryen
+      - name: Restore resolved Stasis nightly
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-linux-x64.tar.gz -ReleaseTag "${{ needs.metadata.outputs.stasis_release }}"
+      - name: Validate and package smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          stasis="${PWD}/.release-toolchain/bin/stasis"
+          "${stasis}" vendor update --workspace "${PWD}"
+          pwsh ./tools/promote-vector-assets.ps1 -Check
+          "${stasis}" fmt --check
+          "${stasis}" check
+          "${stasis}" test
+          rm -rf dist/toddler-match-pr-web .stasis_cache
+          "${stasis}" package --target web --out dist/toddler-match-pr-web
+          test -f dist/toddler-match-pr-web/index.html
+
+  desktop:
+    needs: metadata
+    if: needs.metadata.outputs.should_build == 'true' && github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            asset: stasis-nightly-linux-x64.tar.gz
+          - os: windows-latest
+            platform: windows
+            asset: stasis-nightly-win-x64.zip
+          - os: macos-15
+            platform: macos
+            asset: stasis-nightly-osx-arm64.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Restore resolved Stasis nightly
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./tools/restore-stasis-release.ps1 -AssetName "${{ matrix.asset }}" -ReleaseTag "${{ needs.metadata.outputs.stasis_release }}"
+      - name: Build Linux release package
+        if: matrix.platform == 'linux'
+        shell: bash
+        env:
+          VERSION: ${{ needs.metadata.outputs.product_version }}
+        run: |
+          set -euo pipefail
+          stasis="${PWD}/.release-toolchain/bin/stasis"
+          "${stasis}" vendor update --workspace "${PWD}"
+          "${stasis}" fmt --check
+          "${stasis}" check
+          "${stasis}" test
+          rm -rf dist/toddler-match-release .stasis_cache
+          "${stasis}" package --target desktop --out dist/toddler-match-release
+          tar -czf "toddler-match-${VERSION}-linux-x64.tar.gz" -C dist toddler-match-release
+      - name: Build macOS release package
+        if: matrix.platform == 'macos'
+        shell: bash
+        env:
+          VERSION: ${{ needs.metadata.outputs.product_version }}
+        run: |
+          set -euo pipefail
+          stasis="${PWD}/.release-toolchain/bin/stasis"
+          "${stasis}" vendor update --workspace "${PWD}"
+          "${stasis}" fmt --check
+          "${stasis}" check
+          "${stasis}" test
+          rm -rf dist/toddler-match-release .stasis_cache
+          "${stasis}" package --target desktop --out dist/toddler-match-release
+          tar -czf "toddler-match-${VERSION}-macos-arm64.tar.gz" -C dist toddler-match-release
+      - name: Build Windows release package
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.metadata.outputs.product_version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $stasis = (Resolve-Path ./.release-toolchain/stasis.exe).Path
+          & $stasis vendor update --workspace (Get-Location).Path
+          if ($LASTEXITCODE -ne 0) { throw "Stasis vendor update failed" }
+          & $stasis fmt --check
+          if ($LASTEXITCODE -ne 0) { throw "Stasis fmt --check failed" }
+          & $stasis check
+          if ($LASTEXITCODE -ne 0) { throw "Stasis check failed" }
+          & $stasis test
+          if ($LASTEXITCODE -ne 0) { throw "Stasis test failed" }
+          $package = "dist/toddler-match-release"
+          if (Test-Path -LiteralPath $package) { Remove-Item -LiteralPath $package -Recurse -Force }
+          if (Test-Path -LiteralPath .stasis_cache) { Remove-Item -LiteralPath .stasis_cache -Recurse -Force }
+          & $stasis package --target desktop --out $package
+          if ($LASTEXITCODE -ne 0) { throw "Stasis desktop package failed" }
+          Compress-Archive -Path $package -DestinationPath "toddler-match-$env:VERSION-windows-x64.zip" -CompressionLevel Optimal
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toddler-match-desktop-${{ matrix.platform }}-${{ needs.metadata.outputs.product_version }}
+          path: |
+            toddler-match-${{ needs.metadata.outputs.product_version }}-*.tar.gz
+            toddler-match-${{ needs.metadata.outputs.product_version }}-*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  android:
+    needs: metadata
+    if: needs.metadata.outputs.should_build == 'true' && github.event_name != 'pull_request'
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install pinned Android SDK components
+        shell: pwsh
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.0.12077973"
+          if ($LASTEXITCODE -ne 0) { throw "Android SDK component installation failed" }
+      - name: Restore resolved Stasis nightly
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-win-x64.zip -ReleaseTag "${{ needs.metadata.outputs.stasis_release }}"
+          (Resolve-Path ./.release-toolchain).Path | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Restore pinned Android dependencies
+        shell: pwsh
+        run: ./tools/restore-android-dependencies.ps1 -StasisPath (Resolve-Path ./.release-toolchain/stasis.exe)
+      - name: Restore stable Android debug keystore
+        shell: pwsh
+        env:
+          WEEKLY_ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.WEEKLY_ANDROID_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WEEKLY_ANDROID_DEBUG_KEYSTORE_BASE64)) { throw "WEEKLY_ANDROID_DEBUG_KEYSTORE_BASE64 is required" }
+          $keyPath = Join-Path $env:RUNNER_TEMP "toddler-match-weekly-debug.keystore"
+          [IO.File]::WriteAllBytes($keyPath, [Convert]::FromBase64String($env:WEEKLY_ANDROID_DEBUG_KEYSTORE_BASE64))
+          "WEEKLY_ANDROID_DEBUG_KEYSTORE_PATH=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Build and audit Android arm64 APK
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.metadata.outputs.product_version }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          ./tools/build-android-apk.ps1 -StasisPath (Resolve-Path ./.release-toolchain/stasis.exe) -DebugKeystorePath $env:WEEKLY_ANDROID_DEBUG_KEYSTORE_PATH -VersionCode $env:RUN_NUMBER -VersionName $env:VERSION
+          if ($LASTEXITCODE -ne 0) { throw "Android packaging failed" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toddler-match-android-${{ needs.metadata.outputs.product_version }}
+          path: toddler-match-${{ needs.metadata.outputs.product_version }}-android-arm64.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Remove Android tools, caches, and signing key
+        if: always()
+        shell: pwsh
+        run: |
+          @(".release-toolchain", ".stasis_cache", ".gradle-cache", "vendor/android-deps", "dist/android-weekly") | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object { Remove-Item -LiteralPath $_ -Recurse -Force -ErrorAction SilentlyContinue }
+          if ($env:WEEKLY_ANDROID_DEBUG_KEYSTORE_PATH -and (Test-Path -LiteralPath $env:WEEKLY_ANDROID_DEBUG_KEYSTORE_PATH)) { Remove-Item -LiteralPath $env:WEEKLY_ANDROID_DEBUG_KEYSTORE_PATH -Force -ErrorAction SilentlyContinue }
+
+  web:
+    needs: metadata
+    if: needs.metadata.outputs.should_build == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install WebAssembly optimizer
+        run: sudo apt-get update && sudo apt-get install --yes binaryen
+      - name: Restore resolved Stasis nightly
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-linux-x64.tar.gz -ReleaseTag "${{ needs.metadata.outputs.stasis_release }}"
+      - name: Build web release package
+        shell: bash
+        env:
+          VERSION: ${{ needs.metadata.outputs.product_version }}
+        run: |
+          set -euo pipefail
+          stasis="${PWD}/.release-toolchain/bin/stasis"
+          "${stasis}" vendor update --workspace "${PWD}"
+          "${stasis}" fmt --check
+          "${stasis}" check
+          "${stasis}" test
+          rm -rf dist/toddler-match-release-web .stasis_cache
+          "${stasis}" package --target web --out dist/toddler-match-release-web
+          tar -czf "toddler-match-${VERSION}-web.tar.gz" -C dist toddler-match-release-web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toddler-match-web-${{ needs.metadata.outputs.product_version }}
+          path: toddler-match-${{ needs.metadata.outputs.product_version }}-web.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: [metadata, desktop, android, web]
+    if: needs.metadata.outputs.should_build == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: toddler-match-*
+          path: release
+          merge-multiple: true
+      - name: Create checksums and provenance manifest
+        shell: bash
+        env:
+          PREVIOUS_SOURCE_COMMIT: ${{ needs.metadata.outputs.previous_source_commit }}
+          SOURCE_COMPARE_URL: ${{ needs.metadata.outputs.source_compare_url }}
+          PRODUCT_VERSION: ${{ needs.metadata.outputs.product_version }}
+          STASIS_RELEASE: ${{ needs.metadata.outputs.stasis_release }}
+        run: |
+          set -euo pipefail
+          cd release
+          find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.apk' \) -printf '%f\n' | sort | while IFS= read -r artifact; do sha256sum "${artifact}"; done > SHA256SUMS.txt
+          test -s SHA256SUMS.txt
+          jq -Rn \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg commit "${GITHUB_SHA}" \
+            --arg previous_commit "${PREVIOUS_SOURCE_COMMIT}" \
+            --arg compare_url "${SOURCE_COMPARE_URL}" \
+            --arg ref "${GITHUB_REF}" \
+            --arg version "${PRODUCT_VERSION}" \
+            --arg stasis_release "${STASIS_RELEASE}" \
+            --arg run_url "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            '{
+              schema: "toddler-match-weekly-build-manifest",
+              version: 1,
+              repository: $repository,
+              source_commit: $commit,
+              previous_source_commit: (if $previous_commit == "" then null else $previous_commit end),
+              source_compare_url: (if $compare_url == "" then null else $compare_url end),
+              source_ref: $ref,
+              product_version: $version,
+              stasis_release: $stasis_release,
+              workflow_run: $run_url,
+              artifacts: [inputs | capture("(?<sha256>[0-9a-f]{64})  (?<name>.+)")]
+            }' < SHA256SUMS.txt > BUILD-MANIFEST.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toddler-match-weekly-release-${{ needs.metadata.outputs.product_version }}
+          path: |
+            release/*.tar.gz
+            release/*.zip
+            release/*.apk
+            release/SHA256SUMS.txt
+            release/BUILD-MANIFEST.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Publish prerelease GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.metadata.outputs.release_tag }}
+          PRODUCT_VERSION: ${{ needs.metadata.outputs.product_version }}
+        run: |
+          set -euo pipefail
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" release/*.tar.gz release/*.zip release/*.apk release/SHA256SUMS.txt release/BUILD-MANIFEST.json --repo "${GITHUB_REPOSITORY}" --clobber
+          else
+            gh release create "${RELEASE_TAG}" release/*.tar.gz release/*.zip release/*.apk release/SHA256SUMS.txt release/BUILD-MANIFEST.json \
+              --repo "${GITHUB_REPOSITORY}" --target "${GITHUB_SHA}" --title "Toddler Match ${PRODUCT_VERSION}" --generate-notes --prerelease
+          fi
+

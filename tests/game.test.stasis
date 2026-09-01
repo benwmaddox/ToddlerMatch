@@ -1,0 +1,161 @@
+import "../src/game.stasis";
+
+function find_match(): i32 {
+    let i: i32 = 0;
+    for (i = 0; i < game.option_count; i = i + 1) {
+        if (!game.options[i].matched && option_matches_target(i)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+function find_wrong(): i32 {
+    let i: i32 = 0;
+    for (i = 0; i < game.option_count; i = i + 1) {
+        if (!option_matches_target(i)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+test `all four levels preserve their bounds and choice counts`(): bool {
+    reset_game(395);
+    configure_level(1);
+    if (game.option_count != 6 || game.max_number != 6 || game.color_count != 4 || game.shape_count != 5 || game.shuffle_on_mistake) {
+        return false;
+    }
+    configure_level(2);
+    if (!game.shuffle_on_mistake || game.option_count != 6) {
+        return false;
+    }
+    configure_level(3);
+    if (game.max_number != 15 || game.color_count != 5 || game.shape_count != 6 || game.option_count != 6) {
+        return false;
+    }
+    configure_level(4);
+    return game.option_count == 9 && game.max_number == 15 && game.shuffle_on_mistake;
+}
+
+test `generation is deterministic bounded and guarantees a match`(): bool {
+    reset_game(395);
+    start_level(4);
+    if (find_match() < 0 || game.matches_remaining < 1 || game.matches_remaining > 9) {
+        return false;
+    }
+    let first_number: i32 = game.options[0].number;
+    let first_shape: i32 = game.options[0].shape;
+    let first_color: i32 = game.options[0].color;
+    reset_game(395);
+    start_level(4);
+    return game.options[0].number == first_number && game.options[0].shape == first_shape && game.options[0].color == first_color;
+}
+
+test `correct choices retire once and win at zero`(): bool {
+    reset_game(91);
+    start_level(1);
+    let before: i32 = game.matches_remaining;
+    let index: i32 = find_match();
+    if (index < 0 || !choose_option(index) || game.matches_remaining != before - 1) {
+        return false;
+    }
+    if (choose_option(index)) {
+        return false;
+    }
+    let guard: i32 = 0;
+    for (guard = 0; guard < 9 && game.phase == PHASE_ACTIVE; guard = guard + 1) {
+        index = find_match();
+        if (index >= 0) {
+            choose_option(index);
+        }
+    }
+    return game.phase == PHASE_WON && game.matches_remaining == 0 && game.audio_event == AUDIO_WIN;
+}
+
+test `level one shakes and later levels shuffle on mistakes`(): bool {
+    reset_game(17);
+    start_level(1);
+    let wrong: i32 = find_wrong();
+    if (wrong < 0) {
+        return false;
+    }
+    choose_option(wrong);
+    if (game.shake_index != wrong || game.shake_ticks != SHAKE_TICKS || game.shuffle_revision != 0) {
+        return false;
+    }
+    reset_game(17);
+    start_level(2);
+    wrong = find_wrong();
+    if (wrong < 0) {
+        return false;
+    }
+    choose_option(wrong);
+    return game.shake_index == -1 && game.shuffle_revision == 1 && game.audio_event == AUDIO_WRONG;
+}
+
+test `prompt replay is active-only and reset-safe`(): bool {
+    reset_game(31);
+    start_level(3);
+    replay_prompt();
+    if (game.prompt_replays != 1 || game.audio_event != AUDIO_PROMPT) {
+        return false;
+    }
+    game.phase = PHASE_WON;
+    replay_prompt();
+    if (game.prompt_replays != 1) {
+        return false;
+    }
+    reset_game(31);
+    return game.prompt_replays == 0 && game.audio_event == AUDIO_NONE;
+}
+
+test `win and prompt transitions use exact toddler pacing`(): bool {
+    reset_game(53);
+    start_level(1);
+    game.phase = PHASE_WON;
+    game.phase_ticks = WIN_TICKS - 1;
+    advance_game_tick();
+    if (game.phase != PHASE_PROMPT_FADE || game.phase_ticks != 0) {
+        return false;
+    }
+    game.phase_ticks = PROMPT_FADE_TICKS - 1;
+    advance_game_tick();
+    return game.phase == PHASE_ACTIVE && game.phase_ticks == 0;
+}
+
+test `logical pointer boundaries and round trips are exact`(): bool {
+    if (!point_in_rect(54.0, 1030.0, 54.0, 1030.0, 240.0, 320.0)) {
+        return false;
+    }
+    if (!point_in_rect(294.0, 1350.0, 54.0, 1030.0, 240.0, 320.0)) {
+        return false;
+    }
+    if (point_in_rect(294.01, 1350.0, 54.0, 1030.0, 240.0, 320.0)) {
+        return false;
+    }
+    let x: f32 = 417.0;
+    let px: f32 = logical_to_viewport_axis(x, 1440.0, i32_to_f32(LOGICAL_WIDTH));
+    let round_trip: f32 = map_pointer_axis(px, 1440.0, i32_to_f32(LOGICAL_WIDTH));
+    return round_trip == x && map_pointer_axis(-1.0, 1440.0, 900.0) == 0.0 && map_pointer_axis(1441.0, 1440.0, 900.0) == 900.0;
+}
+
+test `orientation recreation keeps authoritative state`(): bool {
+    reset_game(73);
+    start_level(4);
+    let rng_before: i32 = game.rng_state;
+    let rounds_before: i32 = game.rounds_completed;
+    let x_portrait: f32 = map_pointer_axis(450.0, 900.0, 900.0);
+    let x_landscape: f32 = map_pointer_axis(1000.0, 2000.0, 900.0);
+    return x_portrait == x_landscape && game.rng_state == rng_before && game.rounds_completed == rounds_before;
+}
+
+test `state and caches remain bounded`(): bool {
+    reset_game(101);
+    start_level(4);
+    let i: i32 = 0;
+    for (i = 0; i < 1000; i = i + 1) {
+        advance_game_tick();
+    }
+    return game.option_count <= MAX_OPTIONS && game.shake_ticks >= 0 && game.audio_event_revision >= 1 && game.pointer_consumed_count == 0;
+}
