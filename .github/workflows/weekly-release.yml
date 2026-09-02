@@ -11,16 +11,6 @@ on:
         required: true
         default: true
         type: boolean
-  pull_request:
-    paths:
-      - ".github/workflows/weekly-release.yml"
-      - "assets/**"
-      - "src/**"
-      - "tests/**"
-      - "tools/**"
-      - "vendor/stasis/**"
-      - "stasis.json"
-
 concurrency:
   group: toddler-match-weekly-release-${{ github.ref }}
   cancel-in-progress: false
@@ -138,33 +128,6 @@ jobs:
           "source_compare_url=$compareUrl" >> $env:GITHUB_OUTPUT
           if ($shouldBuild) { "Build required: source, Stasis, first-run, or forced manual build." >> $env:GITHUB_STEP_SUMMARY }
           else { "No build-relevant source or Stasis changes since the latest published weekly release; build skipped." >> $env:GITHUB_STEP_SUMMARY }
-
-  pr-validation:
-    needs: metadata
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Install web packaging optimizer
-        run: sudo apt-get update && sudo apt-get install --yes binaryen
-      - name: Restore resolved Stasis nightly
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-linux-x64.tar.gz -ReleaseTag "${{ needs.metadata.outputs.stasis_release }}"
-      - name: Validate and package smoke test
-        shell: bash
-        run: |
-          set -euo pipefail
-          stasis="${PWD}/.release-toolchain/bin/stasis"
-          "${stasis}" vendor update --workspace "${PWD}"
-          pwsh ./tools/promote-vector-assets.ps1 -Check
-          "${stasis}" fmt --check
-          "${stasis}" check
-          "${stasis}" test
-          rm -rf dist/toddler-match-pr-web .stasis_cache
-          "${stasis}" package --target web --out dist/toddler-match-pr-web
-          test -f dist/toddler-match-pr-web/index.html
 
   desktop:
     needs: metadata

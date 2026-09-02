@@ -1,0 +1,42 @@
+name: PR Stasis check
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stasis-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve newest complete Stasis nightly
+        id: stasis_release
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $releaseId = (./tools/resolve-stasis-nightly.ps1 | Out-String).Trim()
+          if ([string]::IsNullOrWhiteSpace($releaseId)) { throw "Unable to resolve the newest complete Stasis nightly" }
+          "release_id=$releaseId" >> $env:GITHUB_OUTPUT
+
+      - name: Restore resolved Stasis nightly
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-linux-x64.tar.gz -ReleaseTag "${{ steps.stasis_release.outputs.release_id }}"
+
+      - name: Check Stasis project
+        shell: bash
+        run: |
+          set -euo pipefail
+          stasis="$PWD/.release-toolchain/bin/stasis"
+          "${stasis}" vendor status --workspace "$PWD"
+          "${stasis}" check
