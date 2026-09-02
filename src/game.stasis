@@ -51,6 +51,8 @@ struct MatchState {
     audio_event: i32;
     audio_event_revision: i32;
     pointer_consumed_count: i32;
+    settings_open: bool;
+    voice_volume: i32;
 }
 
 global game: MatchState;
@@ -80,6 +82,30 @@ function reset_game(seed: i32): void {
     game.audio_event = AUDIO_NONE;
     game.audio_event_revision = 0;
     game.pointer_consumed_count = 0;
+    game.settings_open = false;
+    game.voice_volume = 80;
+}
+
+function clamp_voice_volume(volume: i32): i32 {
+    if (volume < 0) {
+        return 0;
+    }
+    if (volume > 100) {
+        return 100;
+    }
+    return volume;
+}
+
+function set_voice_volume(volume: i32): void {
+    game.voice_volume = clamp_voice_volume(volume);
+}
+
+function open_settings(): void {
+    game.settings_open = true;
+}
+
+function close_settings(): void {
+    game.settings_open = false;
 }
 
 function next_random(limit: i32): i32 {
@@ -238,7 +264,7 @@ function shuffle_unmatched(): void {
 }
 
 function choose_option(index: i32): bool {
-    if (game.screen != SCREEN_PLAY || game.phase != PHASE_ACTIVE) {
+    if (game.settings_open || game.screen != SCREEN_PLAY || game.phase != PHASE_ACTIVE) {
         return false;
     }
     if (index < 0 || index >= game.option_count || game.options[index].matched) {
@@ -268,13 +294,16 @@ function choose_option(index: i32): bool {
 }
 
 function replay_prompt(): void {
-    if (game.screen == SCREEN_PLAY && game.phase == PHASE_ACTIVE) {
+    if (!game.settings_open && game.screen == SCREEN_PLAY && game.phase == PHASE_ACTIVE) {
         game.prompt_replays = game.prompt_replays + 1;
         emit_audio(AUDIO_PROMPT);
     }
 }
 
 function advance_game_tick(): void {
+    if (game.settings_open) {
+        return;
+    }
     game.tick_count = game.tick_count + 1;
     if (game.shake_ticks > 0) {
         game.shake_ticks = game.shake_ticks - 1;
