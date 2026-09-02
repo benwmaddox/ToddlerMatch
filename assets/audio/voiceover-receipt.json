@@ -1,0 +1,42 @@
+{
+  "generated_utc": "2026-09-02T09:22:53.6215095Z",
+  "provider": "ElevenLabs",
+  "voice_id": "cgSgspJ2msm6clMCkdW9",
+  "voice_name": "Jessica",
+  "voice_category": "premade",
+  "model_id": "eleven_multilingual_v2",
+  "requested_output_format": "mp3_44100_128",
+  "catalog_sha256": "251e68a0a80c401c1461980b735e31625da985513fe56a9770c903bb9589d6bd",
+  "clips": [
+    {
+      "file": "match-by-color.mp3",
+      "text": "Match by color",
+      "codec": "mp3",
+      "sample_rate": 44100,
+      "bitrate": 128000,
+      "channels": 1,
+      "duration_seconds": 1.161,
+      "sha256": "756fe68b55c326f9f2d3ce277f2ef8dc7911d4b3c8d1df289832eeba579e2f6e"
+    },
+    {
+      "file": "match-by-shape.mp3",
+      "text": "Match by shape",
+      "codec": "mp3",
+      "sample_rate": 44100,
+      "bitrate": 128000,
+      "channels": 1,
+      "duration_seconds": 1.161,
+      "sha256": "61affe1fc7e98b8d61698c6c53a153f54fc2486fb490ed9b9da5d5c4c23c0794"
+    },
+    {
+      "file": "match-by-number.mp3",
+      "text": "Match by number",
+      "codec": "mp3",
+      "sample_rate": 44100,
+      "bitrate": 128000,
+      "channels": 1,
+      "duration_seconds": 1.068,
+      "sha256": "da72807d5d0265d16143ec67248bfc9576aaf35ba3e80b684b0ad238e1a3f62f"
+    }
+  ]
+}

@@ -159,3 +159,34 @@ test `state and caches remain bounded`(): bool {
     }
     return game.option_count <= MAX_OPTIONS && game.shake_ticks >= 0 && game.audio_event_revision >= 1 && game.pointer_consumed_count == 0;
 }
+
+test `voice volume clamps both endpoints`(): bool {
+    reset_game(107);
+    if (game.voice_volume != 80 || clamp_voice_volume(-1) != 0 || clamp_voice_volume(101) != 100) {
+        return false;
+    }
+    set_voice_volume(-20);
+    if (game.voice_volume != 0) {
+        return false;
+    }
+    set_voice_volume(140);
+    return game.voice_volume == 100;
+}
+
+test `settings freeze ticks and block prompt actions`(): bool {
+    reset_game(109);
+    start_level(2);
+    game.phase = PHASE_WON;
+    game.phase_ticks = WIN_TICKS - 1;
+    let tick_before: i32 = game.tick_count;
+    let audio_before: i32 = game.audio_event_revision;
+    open_settings();
+    advance_game_tick();
+    replay_prompt();
+    if (!game.settings_open || game.tick_count != tick_before || game.phase_ticks != WIN_TICKS - 1 || game.audio_event_revision != audio_before) {
+        return false;
+    }
+    close_settings();
+    advance_game_tick();
+    return !game.settings_open && game.phase == PHASE_PROMPT_FADE && game.tick_count == tick_before + 1;
+}

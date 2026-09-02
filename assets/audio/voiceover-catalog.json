@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "provider": "ElevenLabs",
+  "voice": {
+    "id": "cgSgspJ2msm6clMCkdW9",
+    "name": "Jessica",
+    "category": "premade",
+    "description": "Warm, friendly, clear female voice",
+    "model_id": "eleven_multilingual_v2",
+    "output_format": "mp3_44100_128",
+    "settings": {
+      "stability": 0.55,
+      "similarity_boost": 0.75,
+      "style": 0.15,
+      "use_speaker_boost": true
+    }
+  },
+  "prompts": [
+    {
+      "goal": "color",
+      "text": "Match by color",
+      "file": "match-by-color.mp3",
+      "seed": 73101
+    },
+    {
+      "goal": "shape",
+      "text": "Match by shape",
+      "file": "match-by-shape.mp3",
+      "seed": 73102
+    },
+    {
+      "goal": "number",
+      "text": "Match by number",
+      "file": "match-by-number.mp3",
+      "seed": 73103
+    }
+  ]
+}
