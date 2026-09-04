@@ -4,6 +4,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $shapeRoot = Join-Path $root "assets/shapes"
 $goalRoot = Join-Path $root "assets/goals"
 $assetRoot = Join-Path $root "assets"
+$manifestPath = Join-Path $assetRoot "manifest.json"
 $configPath = Join-Path $PSScriptRoot "svg-optimizer-config.json"
 $configHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $configPath).Hash.ToLowerInvariant()
 $colors = [ordered]@{ red="#ff5252"; green="#4caf50"; blue="#2196f3"; yellow="#f6d600"; black="#111111" }
@@ -39,6 +40,8 @@ Add-Asset "goals/shape.svg" '<rect x="10" y="10" width="30" height="30" fill="#6
 Add-Asset "goals/number.svg" '<path d="M13 23H25V77H13M39 34C39 20 67 18 67 36C67 50 41 56 39 77H70M82 24H94V77H82" fill="none" stroke="#263238" stroke-linecap="round" stroke-linejoin="round" stroke-width="8"/>'
 $fontPath = Join-Path $root "assets/fonts/Basic-Regular.ttf"
 if (!(Test-Path -LiteralPath $fontPath)) { throw "Missing checked-in font $fontPath" }
+$gearPath = Join-Path $root "assets/ui/gear.svg"
+if (!(Test-Path -LiteralPath $gearPath)) { throw "Missing checked-in gear icon $gearPath" }
 if ($Check) {
   $actualAssets = @(
     Get-ChildItem -File -Recurse $shapeRoot,$goalRoot -Filter '*.svg' |
@@ -52,4 +55,63 @@ if ($Check) {
 }
 $canonicalTotal = 0
 foreach ($relative in $assets) { $canonicalTotal += (Get-Item -LiteralPath (Join-Path $assetRoot $relative)).Length }
+$manifestAssets = @($assets | ForEach-Object {
+  $path = "assets/$($_.Replace('\','/'))"
+  [ordered]@{
+    id=(($_ -replace '[^a-zA-Z0-9]+','_').Trim('_'))
+    path=$path
+    content_sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $assetRoot $_)).Hash.ToLowerInvariant()
+    format=[ordered]@{kind="sprite";encoding="svg";width=100;height=100}
+    dependencies=@()
+  }
+})
+$manifestAssets += [ordered]@{
+  id="ui_gear_svg"
+  path="assets/ui/gear.svg"
+  content_sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $gearPath).Hash.ToLowerInvariant()
+  format=[ordered]@{kind="sprite";encoding="svg";width=100;height=100}
+  dependencies=@()
+}
+$manifestAssets += [ordered]@{
+  id="basic_font"
+  path="assets/fonts/Basic-Regular.ttf"
+  content_sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $fontPath).Hash.ToLowerInvariant()
+  format=[ordered]@{kind="font";encoding="ttf"}
+  dependencies=@()
+}
+$audio = [ordered]@{
+  "match-by-color.mp3" = 51200
+  "match-by-shape.mp3" = 51200
+  "match-by-number.mp3" = 47104
+}
+foreach ($name in $audio.Keys) {
+  $path = Join-Path $assetRoot "audio/$name"
+  if (!(Test-Path -LiteralPath $path)) { throw "Missing checked-in prompt audio $path" }
+  $manifestAssets += [ordered]@{
+    id=("audio_" + (($name -replace '[^a-zA-Z0-9]+','_').Trim('_')))
+    path="assets/audio/$name"
+    content_sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant()
+    format=[ordered]@{kind="audio";encoding="mp3";sample_rate=44100;channels=1;duration_frames=$audio[$name]}
+    dependencies=@()
+  }
+}
+$manifest = [ordered]@{
+  schema="stasis-assets"
+  version=2
+  display=[ordered]@{
+    logical_width=900
+    logical_height=2000
+    max_physical_width=1800
+    max_physical_height=4000
+    scale_mode="fit"
+  }
+  assets=$manifestAssets
+}
+$manifestText = ($manifest | ConvertTo-Json -Depth 8) + "`n"
+if ($Check) {
+  if (!(Test-Path -LiteralPath $manifestPath)) { throw "Missing asset manifest $manifestPath" }
+  if ((Get-Content -Raw -LiteralPath $manifestPath) -cne $manifestText) { throw "Asset manifest drift" }
+} else {
+  [IO.File]::WriteAllText($manifestPath,$manifestText,[Text.UTF8Encoding]::new($false))
+}
 Write-Output "Promoted and audited $($assets.Count) vector-origin SVG assets; canonical bytes $canonicalTotal; optimizer config $configHash"
