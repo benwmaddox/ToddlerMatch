@@ -19,6 +19,34 @@ rendering boundaries as the default unless the project documents a concrete reas
 - A handoff is complete when the next contributor can teach back the mapping, rationale, and extension point and can diagnose or implement one representative case.
 - End substantial work with `Theory gained:` stating the learned invariant or mapping, the observation supporting it, and one adjacent prediction it makes. Promote repeated durable lessons into this file or the relevant canonical document; leave isolated hypotheses in the work summary.
 
+## Vendor release update policy
+
+- This policy applies to every `stasis.json` project in this repository. Discover all such
+  manifests, including nested projects, and check their applicable `AGENTS.md` guidance when
+  changing pins; keep shared guidance here rather than duplicating it in child documents.
+- Treat `vendor.stasis.release_id`, `vendor.stasis.sha256`, and the complete checked-in
+  `vendor/stasis` snapshot as one release contract. An intentional release or checksum pin
+  change must include the matching vendor snapshot update in the same change.
+- Before updating, run `stasis --json vendor status` from the project directory and inspect
+  the existing manifest and vendor diff. Verify the intended release ID and checksum against
+  that release's authoritative metadata, and use the Stasis executable for that exact release.
+  `stasis vendor update` atomically copies the installed executable's sources; it does not
+  fetch the release named by a manually edited pin. Do not use an arbitrary installed version
+  or hand-edit a checksum to make a mismatched snapshot appear valid.
+- Run `stasis vendor update`, then validate release fidelity: check that the resulting manifest
+  pins match the intended release metadata, and that `stasis --json vendor status` reports
+  matching recorded and installed release IDs/checksums, `actual_sha256` equal to the recorded
+  checksum, `current: true`, and `local_changes: false`. Review the complete vendor diff for
+  missing files, partial updates, or unrelated edits. Run `stasis fmt --check`, `stasis check`,
+  and `stasis test` with the matching release executable; passing tests alone do not prove fidelity.
+- Require explicit reviewer approval before accepting backward release pins, checksum/release
+  mismatches, partial vendor updates, or vendor changes without manifest changes. Document the
+  reason, old and new pins, affected files, and fidelity evidence for any exception; do not
+  silently normalize an existing discrepancy or treat it as approval for a new one.
+- Report each discovered project, its applicable guidance, validation results, and unresolved
+  exceptions. An independently blocked project or repository must not prevent completing the
+  guidance updates for other projects or repositories.
+
 ## Inspect narrowly
 
 Semantic symbol queries (`list`, `find`, `read`, and `references`) are read-only and never
