@@ -35,6 +35,7 @@ Push-Location $projectRoot
 try {
     & $stasis package-mobile --target android-arm64 --workspace $projectRoot --entry src/main.stasis --out $packageOutput
     if ($LASTEXITCODE -ne 0) { throw "Stasis Android packaging failed with exit code $LASTEXITCODE" }
+    & (Join-Path $PSScriptRoot 'apply-branding.ps1') -AndroidRoot $androidRoot
 } finally { Pop-Location }
 
 if (-not (Test-Path -LiteralPath $appGradlePath -PathType Leaf)) { throw "Generated Android app project is missing: $appGradlePath" }
