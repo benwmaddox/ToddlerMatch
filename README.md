@@ -35,6 +35,25 @@ The project design framework under `docs/` records the source behavior map, desi
 
 Pull requests restore the pinned toolchain and run formatting, compiler, deterministic tests, SVG promotion audits, and a Web package smoke test at the exact head SHA. The Friday/manual weekly workflow resolves one complete immutable Stasis nightly and publishes Windows x64, Linux x64, macOS arm64, Web, and Android arm64 artifacts with `SHA256SUMS.txt` and `BUILD-MANIFEST.json`. Manual runs are force builds; scheduled runs skip only when neither source nor Stasis changed.
 
+## Application icons and branded packages
+
+The game has its own Android launcher icon and browser favicon in `branding/`.
+Stage packages with the project helper so the icon is applied after Stasis
+generates its host shell:
+
+```powershell
+./tools/package-branded.ps1 -Target android-arm64 -StasisPath stasis -Out dist/android
+./tools/package-branded.ps1 -Target web -StasisPath stasis -Out dist/web
+```
+
+For Android, build the staged `dist/android/android` Gradle project with the
+normal Android SDK/NDK and signing configuration. The helper stages the project;
+it does not install or publish an APK. Existing installed copies receive the icon
+when an updated build is installed. Direct `stasis package-mobile` or `stasis
+package` calls bypass project branding; use `tools/apply-branding.ps1` afterward
+if generating packages manually. See `branding/README.md` for regeneration and
+`branding/provenance.json` for the original artwork prompt.
+
 ## License
 
 Game code is MIT licensed. `assets/fonts/Basic-Regular.ttf` is licensed separately under SIL OFL 1.1; its source and license are beside the file.

@@ -1,0 +1,7 @@
+{
+  "generator": "built-in image_gen",
+  "intent": "interpretive game launcher icon",
+  "prompt": "Use case: logo-brand. Asset type: production Android game launcher icon, square 1024x1024 opaque bitmap master for ToddlerMatch. Subject: two chunky rounded ivory matching cards, each carrying the same large bright coral five-pointed star, cheerful simple preschool shape matching game, sky blue backdrop and sunny yellow accents. Create polished original stylized game key art with sculpted forms, clean silhouette, restrained luminous highlights and exceptional readability at 48 pixels. One coherent centered emblem, main identifying silhouette entirely within central 60% of canvas so circular Android masks preserve it. Background is richly colored and opaque all the way to square edges, softly shaded with very little detail. Strong foreground/background contrast. No text, letters, numbers, watermark, outer border, rounded square container, mockup, phone, or extra panels. Fill square canvas; do not bake rounded corners.",
+  "source_sha256": "ee9dc5c09b697ed4d6561fb64eb4b90470372fe81d4c67358d13abc56f0f25d7",
+  "derivatives": "Pillow 12.3.0; tools/generate-branding.py; Lanczos sizes and Android adaptive motion overscan"
+}
