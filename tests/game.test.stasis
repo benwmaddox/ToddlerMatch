@@ -1,4 +1,6 @@
 import "../src/game.stasis";
+import "/vendor/stasis/stdlib/ui_axis_layout.stasis";
+import "/vendor/stasis/stdlib/testing/ui_layout_audit.stasis";
 
 function find_match(): i32 {
     let i: i32 = 0;
@@ -31,11 +33,11 @@ test `all four levels preserve their bounds and choice counts`(): bool {
         return false;
     }
     configure_level(3);
-    if (game.max_number != 15 || game.color_count != 5 || game.shape_count != 6 || game.option_count != 6) {
+    if (game.max_number != 20 || game.color_count != 5 || game.shape_count != 6 || game.option_count != 6) {
         return false;
     }
     configure_level(4);
-    return game.option_count == 9 && game.max_number == 15 && game.shuffle_on_mistake;
+    return game.option_count == 9 && game.max_number == 30 && game.shuffle_on_mistake;
 }
 
 test `generation is deterministic bounded and guarantees a match`(): bool {
@@ -50,6 +52,53 @@ test `generation is deterministic bounded and guarantees a match`(): bool {
     reset_game(395);
     start_level(4);
     return game.options[0].number == first_number && game.options[0].shape == first_shape && game.options[0].color == first_color;
+}
+
+test `generated rounds preserve constraints across levels and rules`(): bool {
+    reset_game(395);
+    let goals_seen: bool[3];
+    let level: i32 = 1;
+    for (level = 1; level <= 4; level = level + 1) {
+        configure_level(level);
+        let iteration: i32 = 0;
+        for (iteration = 0; iteration < 32; iteration = iteration + 1) {
+            generate_round();
+            if (
+                game.goal < GOAL_COLOR
+                || game.goal > GOAL_NUMBER
+                || game.target.number < 1
+                || game.target.number > game.max_number
+                || game.target.shape < 0
+                || game.target.shape >= game.shape_count
+                || game.target.color < 0
+                || game.target.color >= game.color_count
+            ) {
+                return false;
+            }
+            goals_seen[game.goal] = true;
+            let matches: i32 = 0;
+            let option: i32 = 0;
+            for (option = 0; option < game.option_count; option = option + 1) {
+                if (
+                    game.options[option].number < 1
+                    || game.options[option].number > game.max_number
+                    || game.options[option].shape < 0
+                    || game.options[option].shape >= game.shape_count
+                    || game.options[option].color < 0
+                    || game.options[option].color >= game.color_count
+                ) {
+                    return false;
+                }
+                if (option_matches_target(option)) {
+                    matches = matches + 1;
+                }
+            }
+            if (matches < 1 || matches != game.matches_remaining) {
+                return false;
+            }
+        }
+    }
+    return goals_seen[GOAL_COLOR] && goals_seen[GOAL_SHAPE] && goals_seen[GOAL_NUMBER];
 }
 
 test `correct choices retire once and win at zero`(): bool {
@@ -92,6 +141,21 @@ test `level one shakes and later levels shuffle on mistakes`(): bool {
     }
     choose_option(wrong);
     return game.shake_index == -1 && game.shuffle_revision == 1 && game.audio_event == AUDIO_WRONG;
+}
+
+test `later-level shuffle always changes remaining card order`(): bool {
+    reset_game(2);
+    game.option_count = 2;
+    game.options[0].number = 1;
+    game.options[0].shape = 0;
+    game.options[0].color = 0;
+    game.options[0].matched = false;
+    game.options[1].number = 2;
+    game.options[1].shape = 1;
+    game.options[1].color = 1;
+    game.options[1].matched = false;
+    shuffle_unmatched();
+    return game.options[0].number == 2 && game.options[1].number == 1 && game.shuffle_revision == 1;
 }
 
 test `prompt replay is active-only and reset-safe`(): bool {
@@ -138,6 +202,24 @@ test `logical pointer boundaries and round trips are exact`(): bool {
     let px: f32 = logical_to_viewport_axis(x, 1440.0, i32_to_f32(LOGICAL_WIDTH));
     let round_trip: f32 = map_pointer_axis(px, 1440.0, i32_to_f32(LOGICAL_WIDTH));
     return round_trip == x && map_pointer_axis(-1.0, 1440.0, 900.0) == 0.0 && map_pointer_axis(1441.0, 1440.0, 900.0) == 900.0;
+}
+
+test `shared axis placement centers shape art in every card layout`(): bool {
+    let target_x: f32 = ui_place_x(330.0, 240.0, 150.0, UiHorizontal.Center);
+    let target_y: f32 = ui_place_y(230.0, 330.0, 150.0, UiVertical.Center);
+    if (!ui_audit_centered_x(330.0, 240.0, target_x, 150.0, 0.0) || !ui_audit_centered_y(230.0, 330.0, target_y, 150.0, 0.0)) {
+        return false;
+    }
+
+    let option_x: f32 = ui_place_x(54.0, 240.0, 150.0, UiHorizontal.Center);
+    let option_y: f32 = ui_place_y(1030.0, 320.0, 150.0, UiVertical.Center);
+    if (!ui_audit_centered_x(54.0, 240.0, option_x, 150.0, 0.0) || !ui_audit_centered_y(1030.0, 320.0, option_y, 150.0, 0.0)) {
+        return false;
+    }
+
+    let compact_x: f32 = ui_place_x(54.0, 240.0, 116.0, UiHorizontal.Center);
+    let compact_y: f32 = ui_place_y(960.0, 250.0, 116.0, UiVertical.Center);
+    return ui_audit_centered_x(54.0, 240.0, compact_x, 116.0, 0.0) && ui_audit_centered_y(960.0, 250.0, compact_y, 116.0, 0.0);
 }
 
 test `orientation recreation keeps authoritative state`(): bool {

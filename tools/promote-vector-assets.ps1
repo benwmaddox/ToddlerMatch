@@ -37,7 +37,6 @@ foreach ($shape in $geometry.Keys) {
 }
 Add-Asset "goals/color.svg" '<circle cx="30" cy="30" r="18" fill="#ff5252"/><circle cx="70" cy="30" r="18" fill="#2196f3"/><circle cx="30" cy="70" r="18" fill="#f6d600"/><circle cx="70" cy="70" r="18" fill="#111111"/>'
 Add-Asset "goals/shape.svg" '<rect x="10" y="10" width="30" height="30" fill="#666666"/><circle cx="70" cy="25" r="15" fill="#666666"/><polygon points="50,60 80,90 20,90" fill="#666666"/>'
-Add-Asset "goals/number.svg" '<path d="M13 23H25V77H13M39 34C39 20 67 18 67 36C67 50 41 56 39 77H70M82 24H94V77H82" fill="none" stroke="#263238" stroke-linecap="round" stroke-linejoin="round" stroke-width="8"/>'
 $fontPath = Join-Path $root "assets/fonts/Basic-Regular.ttf"
 if (!(Test-Path -LiteralPath $fontPath)) { throw "Missing checked-in font $fontPath" }
 $gearPath = Join-Path $root "assets/ui/gear.svg"

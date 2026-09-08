@@ -394,18 +394,6 @@
       "dependencies": []
     },
     {
-      "id": "goals_number_svg",
-      "path": "assets/goals/number.svg",
-      "content_sha256": "34612f409a47028b24bc56a14eacf5d7e1b8d29381b9dac5204b69a735808e63",
-      "format": {
-        "kind": "sprite",
-        "encoding": "svg",
-        "width": 100,
-        "height": 100
-      },
-      "dependencies": []
-    },
-    {
       "id": "ui_gear_svg",
       "path": "assets/ui/gear.svg",
       "content_sha256": "23c96b766ecf8f3b8cc7093dec5705aea2c0970bc232609b40cff01f6b756590",

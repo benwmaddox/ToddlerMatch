@@ -17,7 +17,7 @@ project:
       interaction_state_variants: color is a separate canonical asset; matched/shake/bounce are runtime transforms and alpha
       assembly_order: card shadow, card face, number text, shape sprite
     - owner: assets/goals/<goal>.svg
-      source_route: vector-origin from existing inline goal marks
+      source_route: vector-origin for color and shape; runtime text for number
       bounds_anchors: 100x100 transparent canvas; centered
       reuse_sites: prompt button
       interaction_state_variants: none; prompt fade is runtime alpha
@@ -30,7 +30,7 @@ project:
     - name: match-shapes
       boundary: circle, square, triangle, hexagon, star, and curvy line in the level palette
     - name: goal-marks
-      boundary: color, shape, and number prompts; text remains runtime-owned
+      boundary: color and shape prompts use SVG; the number prompt is runtime `123` text
   camera_projection: flat orthographic 900x2000 logical canvas with no perspective
   palette_roles:
     ink: '#263238'
