@@ -2,8 +2,10 @@ import "/vendor/stasis/stdlib/stdlib.stasis";
 import "/vendor/stasis/stdlib/graphics.stasis";
 import "/vendor/stasis/stdlib/host_frame.stasis";
 import "/vendor/stasis/stdlib/storage.stasis";
+import "/vendor/stasis/stdlib/ui_axis_layout.stasis";
 import "game.stasis";
 
+// Nightly 290's packaged Web host exposes the stable audio_* ABI while its AudioStream wrapper imports newer stasis_jit_audio_* names.
 extern function @effects(audio) audio_init(sample_rate: i32, channels: i32, target_latency_frames: i32): bool;
 extern function @effects(audio) audio_push_f32_interleaved(samples: f32[], frame_count: i32): i32;
 extern function @effects(audio) audio_play(asset_handle: i32, loop: bool, volume: f32, pan: f32): i32;
@@ -11,28 +13,29 @@ extern function @effects(audio) audio_stop(voice_handle: i32): void;
 extern function @effects(audio) audio_voice_is_playing(voice_handle: i32): bool;
 extern function @effects(audio) audio_voice_set_volume_pan(voice_handle: i32, volume: f32, pan: f32): void;
 
-const TEXT_TODDLER_MATCH: i32 = 16;
-const TEXT_CHOOSE_LEVEL: i32 = 17;
-const TEXT_LEVEL: i32 = 18;
-const TEXT_START_HERE: i32 = 19;
-const TEXT_SHUFFLE_MISTAKES: i32 = 20;
-const TEXT_EXTRA_OPTIONS: i32 = 21;
-const TEXT_NINE_CHOICES: i32 = 22;
-const TEXT_HUNDRED: i32 = 23;
-const TEXT_PERCENT: i32 = 24;
-const TEXT_SETTINGS: i32 = 25;
-const TEXT_VOICE_OVER: i32 = 26;
-const TEXT_DONE: i32 = 27;
-const TEXT_MATCH_COLOR: i32 = 28;
-const TEXT_MATCH_SHAPE: i32 = 29;
-const TEXT_MATCH_NUMBER: i32 = 30;
-const TEXT_GREAT_JOB: i32 = 31;
-const TEXT_NEXT_SOON: i32 = 32;
-const TEXT_RUN_COUNT: i32 = 33;
+const TEXT_TODDLER_MATCH: i32 = 31;
+const TEXT_CHOOSE_LEVEL: i32 = 32;
+const TEXT_LEVEL: i32 = 33;
+const TEXT_START_HERE: i32 = 34;
+const TEXT_SHUFFLE_MISTAKES: i32 = 35;
+const TEXT_EXTRA_OPTIONS: i32 = 36;
+const TEXT_NINE_CHOICES: i32 = 37;
+const TEXT_HUNDRED: i32 = 38;
+const TEXT_PERCENT: i32 = 39;
+const TEXT_SETTINGS: i32 = 40;
+const TEXT_VOICE_OVER: i32 = 41;
+const TEXT_DONE: i32 = 42;
+const TEXT_MATCH_COLOR: i32 = 43;
+const TEXT_MATCH_SHAPE: i32 = 44;
+const TEXT_MATCH_NUMBER: i32 = 45;
+const TEXT_GREAT_JOB: i32 = 46;
+const TEXT_NEXT_SOON: i32 = 47;
+const TEXT_PROMPT_NUMBER: i32 = 48;
+const TEXT_RUN_COUNT: i32 = 49;
 
 global ui_font: i32;
-global text_runs: TextRun[33];
-global sprites: Sprite[34];
+global text_runs: TextRun[49];
+global sprites: Sprite[33];
 global frame: HostFrame;
 global assets_loaded: bool;
 global audio_ready: bool;
@@ -43,6 +46,100 @@ global prompt_audio_voice: i32;
 
 function asset_index(shape: i32, color: i32): i32 {
     return shape * 5 + color;
+}
+
+function number_text(value: i32): string {
+    if (value == 0) {
+        return "0";
+    }
+    if (value == 1) {
+        return "1";
+    }
+    if (value == 2) {
+        return "2";
+    }
+    if (value == 3) {
+        return "3";
+    }
+    if (value == 4) {
+        return "4";
+    }
+    if (value == 5) {
+        return "5";
+    }
+    if (value == 6) {
+        return "6";
+    }
+    if (value == 7) {
+        return "7";
+    }
+    if (value == 8) {
+        return "8";
+    }
+    if (value == 9) {
+        return "9";
+    }
+    if (value == 10) {
+        return "10";
+    }
+    if (value == 11) {
+        return "11";
+    }
+    if (value == 12) {
+        return "12";
+    }
+    if (value == 13) {
+        return "13";
+    }
+    if (value == 14) {
+        return "14";
+    }
+    if (value == 15) {
+        return "15";
+    }
+    if (value == 16) {
+        return "16";
+    }
+    if (value == 17) {
+        return "17";
+    }
+    if (value == 18) {
+        return "18";
+    }
+    if (value == 19) {
+        return "19";
+    }
+    if (value == 20) {
+        return "20";
+    }
+    if (value == 21) {
+        return "21";
+    }
+    if (value == 22) {
+        return "22";
+    }
+    if (value == 23) {
+        return "23";
+    }
+    if (value == 24) {
+        return "24";
+    }
+    if (value == 25) {
+        return "25";
+    }
+    if (value == 26) {
+        return "26";
+    }
+    if (value == 27) {
+        return "27";
+    }
+    if (value == 28) {
+        return "28";
+    }
+    if (value == 29) {
+        return "29";
+    }
+    return "30";
 }
 
 function load_assets(): void {
@@ -143,59 +240,14 @@ function load_assets(): void {
     if (!sprites[31].load_sprite_from("assets/goals/shape.svg", 100, 100)) {
         assets_loaded = false;
     }
-    if (!sprites[32].load_sprite_from("assets/goals/number.svg", 100, 100)) {
+    if (!sprites[32].load_sprite_from("assets/ui/gear.svg", 100, 100)) {
         assets_loaded = false;
     }
-    if (!sprites[33].load_sprite_from("assets/ui/gear.svg", 100, 100)) {
-        assets_loaded = false;
-    }
-    if (!text_runs[0].load_text_from(ui_font, "0")) {
-        assets_loaded = false;
-    }
-    if (!text_runs[1].load_text_from(ui_font, "1")) {
-        assets_loaded = false;
-    }
-    if (!text_runs[2].load_text_from(ui_font, "2")) {
-        assets_loaded = false;
-    }
-    if (!text_runs[3].load_text_from(ui_font, "3")) {
-        assets_loaded = false;
-    }
-    if (!text_runs[4].load_text_from(ui_font, "4")) {
-        assets_loaded = false;
-    }
-    if (!text_runs[5].load_text_from(ui_font, "5")) {
-        assets_loaded = false;
-    }
-    if (!text_runs[6].load_text_from(ui_font, "6")) {
-        assets_loaded = false;
-    }
-    if (!text_runs[7].load_text_from(ui_font, "7")) {
-        assets_loaded = false;
-    }
-    if (!text_runs[8].load_text_from(ui_font, "8")) {
-        assets_loaded = false;
-    }
-    if (!text_runs[9].load_text_from(ui_font, "9")) {
-        assets_loaded = false;
-    }
-    if (!text_runs[10].load_text_from(ui_font, "10")) {
-        assets_loaded = false;
-    }
-    if (!text_runs[11].load_text_from(ui_font, "11")) {
-        assets_loaded = false;
-    }
-    if (!text_runs[12].load_text_from(ui_font, "12")) {
-        assets_loaded = false;
-    }
-    if (!text_runs[13].load_text_from(ui_font, "13")) {
-        assets_loaded = false;
-    }
-    if (!text_runs[14].load_text_from(ui_font, "14")) {
-        assets_loaded = false;
-    }
-    if (!text_runs[15].load_text_from(ui_font, "15")) {
-        assets_loaded = false;
+    let number: i32 = 0;
+    for (number = 0; number <= 30; number = number + 1) {
+        if (!text_runs[number].load_text_from(ui_font, number_text(number))) {
+            assets_loaded = false;
+        }
     }
     if (!text_runs[TEXT_TODDLER_MATCH].load_text_from(ui_font, "TODDLER MATCH")) {
         assets_loaded = false;
@@ -245,7 +297,10 @@ function load_assets(): void {
     if (!text_runs[TEXT_GREAT_JOB].load_text_from(ui_font, "GREAT JOB!")) {
         assets_loaded = false;
     }
-    if (!text_runs[TEXT_NEXT_SOON].load_text_from(ui_font, "NEXT SOON")) {
+    if (!text_runs[TEXT_NEXT_SOON].load_text_from(ui_font, "NEXT IN")) {
+        assets_loaded = false;
+    }
+    if (!text_runs[TEXT_PROMPT_NUMBER].load_text_from(ui_font, "123")) {
         assets_loaded = false;
     }
 }
@@ -441,15 +496,18 @@ function draw_card(number: i32, shape: i32, color: i32, x: f32, y: f32, w: f32, 
     } else {
         size = 150.0;
     }
-    let sx: f32 = x +(w - size) * 0.5;
-    let sy: f32 = y + h - size - 24.0;
+    let sx: f32 = ui_place_x(x, w, size, UiHorizontal.Center);
+    let sy: f32 = ui_place_y(y, h, size, UiVertical.Center);
     if (shape >= 0 && shape < 6 && color >= 0 && color < 5) {
         draw_sprite(sprites[asset_index(shape, color)].handle, sx, sy, size, size, 0, f32_to_i32(alpha * 255.0));
     }
-    if (number < 10) {
-        draw_text(number, x + w * 0.43, y + 34.0, 0.15, 0.20, 0.22, alpha);
-    } else {
-        draw_text(number, x + w * 0.34, y + 34.0, 0.15, 0.20, 0.22, alpha);
+    if (number >= 0 && number <= 30) {
+        let number_x: f32 = ui_place_x(x, w, text_runs[number].width, UiHorizontal.Center);
+        let number_y: f32 = sy - text_runs[number].height - 8.0;
+        if (number_y < y + 8.0) {
+            number_y = y + 8.0;
+        }
+        draw_text(number, number_x, number_y, 0.15, 0.20, 0.22, alpha);
     }
 }
 
@@ -477,7 +535,7 @@ function draw_levels(): void {
 
 function draw_gear(): void {
     fill_rect(730.0, 40.0, 130.0, 130.0, 1.0, 1.0, 1.0, 1.0);
-    sprites[33].draw(745.0, 55.0, 255, 0);
+    sprites[32].draw(745.0, 55.0, 255, 0);
 }
 
 function draw_voice_percentage(): void {
@@ -520,33 +578,45 @@ function draw_play(): void {
     draw_text(game.level, 240.0, 58.0, 0.15, 0.20, 0.22, 1.0);
     let prompt_alpha: f32 = 1.0;
     if (game.phase == PHASE_WON) {
-        prompt_alpha = 0.15;
+        prompt_alpha = 1.0 - i32_to_f32(game.phase_ticks) / i32_to_f32(PROMPT_FADE_TICKS);
+        if (prompt_alpha < 0.0) {
+            prompt_alpha = 0.0;
+        }
     } else if (game.phase == PHASE_PROMPT_FADE) {
         prompt_alpha = i32_to_f32(game.phase_ticks) / i32_to_f32(PROMPT_FADE_TICKS);
     }
     draw_card(game.target.number, game.target.shape, game.target.color, 330.0, 230.0, 240.0, 330.0, prompt_alpha);
     fill_rect(190.0, 680.0, 520.0, 180.0, 1.0, 1.0, 1.0, prompt_alpha);
-    sprites[30 + current_goal()].draw(225.0, 720.0, f32_to_i32(prompt_alpha * 255.0), 0);
-    if (current_goal() == GOAL_COLOR) {
-        draw_text(TEXT_MATCH_COLOR, 335.0, 735.0, 0.15, 0.20, 0.22, prompt_alpha);
-    } else if (current_goal() == GOAL_SHAPE) {
-        draw_text(TEXT_MATCH_SHAPE, 335.0, 735.0, 0.15, 0.20, 0.22, prompt_alpha);
+    if (current_goal() != GOAL_NUMBER) {
+        sprites[30 + current_goal()].draw(225.0, 720.0, f32_to_i32(prompt_alpha * 255.0), 0);
     } else {
-        draw_text(TEXT_MATCH_NUMBER, 320.0, 735.0, 0.15, 0.20, 0.22, prompt_alpha);
+        let number_x: f32 = ui_place_x(225.0, 100.0, text_runs[TEXT_PROMPT_NUMBER].width, UiHorizontal.Center);
+        let number_y: f32 = ui_place_y(720.0, 100.0, text_runs[TEXT_PROMPT_NUMBER].height, UiVertical.Center);
+        draw_text(TEXT_PROMPT_NUMBER, number_x, number_y, 0.15, 0.20, 0.22, prompt_alpha);
     }
+    let prompt_label: i32 = TEXT_MATCH_COLOR + current_goal();
+    let prompt_label_x: f32 = 335.0;
+    if (current_goal() == GOAL_NUMBER) {
+        prompt_label_x = 320.0;
+    }
+    let prompt_label_y: f32 = ui_place_y(680.0, 180.0, text_runs[prompt_label].height, UiVertical.Center);
+    draw_text(prompt_label, prompt_label_x, prompt_label_y, 0.15, 0.20, 0.22, prompt_alpha);
     let i: i32 = 0;
     for (i = 0; i < game.option_count; i = i + 1) {
         let alpha: f32 = 1.0;
         if (game.options[i].matched) {
             alpha = 0.18;
         }
+        let y: f32 = option_y(i);
         if (game.phase == PHASE_WON) {
             let delay: i32 = i * 5;
-            if (game.phase_ticks > delay) {
-                alpha = 1.0 - i32_to_f32(game.phase_ticks - delay) / 100.0;
-            }
-            if (alpha < 0.0) {
-                alpha = 0.0;
+            let bounce_ticks: i32 = game.phase_ticks - delay;
+            if (bounce_ticks > 0 && bounce_ticks <= 24) {
+                y = y - i32_to_f32(bounce_ticks) * 80.0 / 24.0;
+            } else if (bounce_ticks > 24 && bounce_ticks < 120) {
+                y = y - 80.0 + i32_to_f32(bounce_ticks - 24) * 1680.0 / 96.0;
+            } else if (bounce_ticks >= 120) {
+                y = y + 1600.0;
             }
         }
         let x: f32 = option_x(i);
@@ -557,20 +627,16 @@ function draw_play(): void {
                 x = x - 18.0;
             }
         }
-        draw_card(
-            game.options[i].number,
-            game.options[i].shape,
-            game.options[i].color,
-            x,
-            option_y(i),
-            option_w(),
-            option_h(),
-            alpha
-        );
+        draw_card(game.options[i].number, game.options[i].shape, game.options[i].color, x, y, option_w(), option_h(), alpha);
     }
     if (game.phase == PHASE_WON) {
         draw_text(TEXT_GREAT_JOB, 310.0, 1820.0, 0.12, 0.55, 0.25, 1.0);
-        draw_text(TEXT_NEXT_SOON, 330.0, 1890.0, 0.27, 0.35, 0.39, 1.0);
+        let seconds_left: i32 =(WIN_TICKS - game.phase_ticks + 59) / 60;
+        if (seconds_left < 1) {
+            seconds_left = 1;
+        }
+        draw_text(TEXT_NEXT_SOON, 280.0, 1890.0, 0.27, 0.35, 0.39, 1.0);
+        draw_text(seconds_left, 545.0, 1890.0, 0.27, 0.35, 0.39, 1.0);
     }
 }
 

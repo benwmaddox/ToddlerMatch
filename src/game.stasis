@@ -133,11 +133,12 @@ function configure_level(level: i32): void {
         game.shuffle_on_mistake = true;
     }
     if (level >= 3) {
-        game.max_number = 15;
+        game.max_number = 20;
         game.color_count = 5;
         game.shape_count = 6;
     }
     if (level == 4) {
+        game.max_number = 30;
         game.option_count = 9;
     }
 }
@@ -242,11 +243,15 @@ function shuffle_unmatched(): void {
     if (count < 2) {
         return;
     }
+    let changed: bool = false;
     let j: i32 = count - 1;
     for (j = count - 1; j > 0; j = j - 1) {
         let swap_position: i32 = next_random(j + 1);
         let left: i32 = remaining[j];
         let right: i32 = remaining[swap_position];
+        if (left != right) {
+            changed = true;
+        }
         let temporary_number: i32 = game.options[left].number;
         let temporary_shape: i32 = game.options[left].shape;
         let temporary_color: i32 = game.options[left].color;
@@ -259,6 +264,26 @@ function shuffle_unmatched(): void {
         game.options[right].shape = temporary_shape;
         game.options[right].color = temporary_color;
         game.options[right].matched = temporary_matched;
+    }
+    if (!changed) {
+        let first: i32 = remaining[0];
+        let first_number: i32 = game.options[first].number;
+        let first_shape: i32 = game.options[first].shape;
+        let first_color: i32 = game.options[first].color;
+        let first_matched: bool = game.options[first].matched;
+        for (i = 0; i < count - 1; i = i + 1) {
+            let left: i32 = remaining[i];
+            let right: i32 = remaining[i + 1];
+            game.options[left].number = game.options[right].number;
+            game.options[left].shape = game.options[right].shape;
+            game.options[left].color = game.options[right].color;
+            game.options[left].matched = game.options[right].matched;
+        }
+        let last: i32 = remaining[count - 1];
+        game.options[last].number = first_number;
+        game.options[last].shape = first_shape;
+        game.options[last].color = first_color;
+        game.options[last].matched = first_matched;
     }
     game.shuffle_revision = game.shuffle_revision + 1;
 }

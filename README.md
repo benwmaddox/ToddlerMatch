@@ -6,14 +6,14 @@ Toddler Match is a touch-first Stasis game migrated from the original MaddoxLabs
 
 - Level 1: numbers 1–6, four colors, five shapes, six choices; wrong cards shake.
 - Level 2: Level 1 range; wrong cards shuffle the remaining choices.
-- Level 3: numbers 1–15 plus black and the curvy line; wrong cards shuffle.
-- Level 4: Level 3 range with nine choices.
+- Level 3: numbers 1–20 plus black and the curvy line; wrong cards shuffle.
+- Level 4: numbers 1–30 with nine choices.
 
 Every round is deterministic from the root RNG state and always contains at least one match. The game window, render layout, and authoritative pointer contract are exactly **900×2000 logical pixels** on Web, desktop, and Android. Packaged hosts fit that portrait canvas into the available surface.
 
 ## Build
 
-This repository pins the complete immutable Stasis release `nightly-20260831-270` (source tag commit `8414904107c0a370504ff5dedb4311b9c7e85504`) and checks in its source-only vendor snapshot.
+This repository pins the complete immutable Stasis release `nightly-20260903-290` (`e13d313cb429d478deac82f9a82423e344805b30597ecee2837eb91f472d099f`) and checks in its source-only vendor snapshot.
 
 ```powershell
 stasis fmt --check
@@ -25,7 +25,7 @@ stasis package --target desktop --out dist/desktop
 stasis package-mobile --target android-arm64 --out dist/android
 ```
 
-`src/game.stasis` owns deterministic model, level generation, matching, shuffle, progression, settings state, input geometry, and audio events. `src/main.stasis` owns host input binding, persistent Voice Over volume, the three static prompt voiceovers, bounded procedural feedback audio, the 34-entry SVG cache, and rendering. Rendering never advances gameplay, and opening Settings freezes round timers.
+`src/game.stasis` owns deterministic model, level generation, matching, shuffle, progression, settings state, input geometry, and audio events. `src/main.stasis` owns host input binding, persistent Voice Over volume, the three static prompt voiceovers, bounded procedural feedback audio, the 33-entry SVG cache, cached number text, and rendering. Rendering never advances gameplay, and opening Settings freezes round timers.
 
 The gear button opens a toddler-friendly Voice Over volume control on both screens. The generated prompt clips and their non-secret provenance live under `assets/audio/`; rerun `./tools/generate-voiceovers.ps1 -Force` with `ELEVENLABS_API_KEY` in the process environment or `D:\code\ChessTD\.env` to recreate them.
 
