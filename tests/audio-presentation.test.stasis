@@ -1,0 +1,27 @@
+import "../src/main.stasis";
+
+test `prompt revision remains pending while its asset is loading`(): bool {
+    reset_game(395);
+    start_level(1);
+    audio_ready = true;
+    presented_audio_revision = 0;
+    let goal: i32 = current_goal();
+    prompt_audio_assets[goal].request = 0;
+    prompt_audio_assets[goal].state = AssetState.Pending;
+    present_audio_event();
+    if (presented_audio_revision == game.audio_event_revision) {
+        return false;
+    }
+    set_voice_volume(0);
+    present_audio_event();
+    return presented_audio_revision == game.audio_event_revision;
+}
+
+test `procedural cue revisions commit without audio availability`(): bool {
+    reset_game(395);
+    audio_ready = false;
+    presented_audio_revision = 0;
+    emit_audio(AUDIO_CORRECT);
+    present_audio_event();
+    return presented_audio_revision == game.audio_event_revision;
+}

@@ -16,21 +16,21 @@ project:
       reuse_sites: target card and every option card
       interaction_state_variants: color is a separate canonical asset; matched/shake/bounce are runtime transforms and alpha
       assembly_order: card shadow, card face, number text, shape sprite
-    - owner: assets/goals/<goal>.svg
+    - owner: assets/goals/color.svg and assets/goals/shape.svg
       source_route: vector-origin for color and shape; runtime text for number
       bounds_anchors: 100x100 transparent canvas; centered
       reuse_sites: prompt button
       interaction_state_variants: none; prompt fade is runtime alpha
       assembly_order: prompt face, goal mark, runtime prompt text
   component_extraction_evidence: Not applicable; the authoritative inputs are inline vectors rather than raster crops.
-  deliverable_roles: Independently owned svg_direct shape/goal runtime assets; runtime owns all text, numbers, cards, controls, hit targets, animations, safe areas, and layout.
+  deliverable_roles: Independently owned svg_direct shape/color-goal/shape-goal runtime assets; runtime owns all text, numbers, the settings button identity, cards, controls, hit targets, animations, safe areas, and layout.
   screen_asset_contract: none; no whole-screen asset is permitted
   budget_envelope: Each component <= 2 KiB raw and <= 1 KiB deterministic gzip; full canonical SVG kit <= 48 KiB raw. Path count is diagnostic under the vector-origin profile.
   asset_families:
     - name: match-shapes
       boundary: circle, square, triangle, hexagon, star, and curvy line in the level palette
     - name: goal-marks
-      boundary: color and shape prompts use SVG; the number prompt is runtime `123` text
+      boundary: color and shape prompts use SVG; the number prompt and settings identity are runtime text
   camera_projection: flat orthographic 900x2000 logical canvas with no perspective
   palette_roles:
     ink: '#263238'
@@ -70,4 +70,4 @@ project:
   scene_comparison_gate: Render canonical assets on white and #263238 backgrounds at 48, 112, and 224 logical pixels; then exercise the real engine at its 900x2000 logical size and fitted desktop presentation.
 ```
 
-Every item uses `runtime_representation: svg_direct`, `stored_display_sizes: 100x100 SVG`, and `translation_intent: reference-faithful`. Shape anchors are centered; card collision and hit geometry are deliberately runtime-owned. The canonical asset is loaded once per color/shape pair into a bounded 30-sprite cache and rasterized by Stasis at the declared logical size/device density.
+Every SVG item uses `runtime_representation: svg_direct`, `stored_display_sizes: 100x100 SVG`, and `translation_intent: reference-faithful`. Shape anchors are centered; card collision and hit geometry are deliberately runtime-owned. The canonical assets are loaded once into a bounded 32-sprite cache (30 shape/color variants and two goal marks) and rasterized by Stasis at the declared logical size/device density. The asset manifest stays within Stasis's strict schema; ownership, anchor, footprint, palette, and provenance details live in this framework while hashes and encoded dimensions live in `assets/manifest.json`.
