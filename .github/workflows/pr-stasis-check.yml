@@ -16,27 +16,37 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Resolve newest complete Stasis nightly
+      - name: Read repository-pinned Stasis nightly
         id: stasis_release
         shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $releaseId = (./tools/resolve-stasis-nightly.ps1 | Out-String).Trim()
-          if ([string]::IsNullOrWhiteSpace($releaseId)) { throw "Unable to resolve the newest complete Stasis nightly" }
+          $releaseId = [string]((Get-Content stasis.json -Raw | ConvertFrom-Json).vendor.stasis.release_id)
+          if ($releaseId -notmatch '^nightly-[0-9]{8}-[0-9]+$') { throw "Invalid pinned Stasis release: $releaseId" }
           "release_id=$releaseId" >> $env:GITHUB_OUTPUT
 
-      - name: Restore resolved Stasis nightly
+      - name: Restore repository-pinned Stasis nightly
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-linux-x64.tar.gz -ReleaseTag "${{ steps.stasis_release.outputs.release_id }}"
 
-      - name: Check Stasis project
+      - name: Install WebAssembly optimizer
+        run: sudo apt-get update && sudo apt-get install --yes binaryen
+
+      - name: Validate Stasis project and Web package
         shell: bash
         run: |
           set -euo pipefail
           stasis="$PWD/.release-toolchain/bin/stasis"
           "${stasis}" vendor status --workspace "$PWD"
+          "${stasis}" fmt --check
           "${stasis}" check
+          "${stasis}" test
+          pwsh ./tools/promote-vector-assets.ps1 -Check
+          rm -rf dist/pr-web .stasis_cache
+          "${stasis}" package --target web --out dist/pr-web
+          test -s dist/pr-web/index.html
+          test "$(find dist/pr-web -type f -name '*.wasm' | wc -l)" -ge 1

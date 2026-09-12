@@ -31,14 +31,16 @@ const TEXT_MATCH_NUMBER: i32 = 45;
 const TEXT_GREAT_JOB: i32 = 46;
 const TEXT_NEXT_SOON: i32 = 47;
 const TEXT_PROMPT_NUMBER: i32 = 48;
-const TEXT_RUN_COUNT: i32 = 49;
+const TEXT_MENU: i32 = 49;
+const TEXT_RUN_COUNT: i32 = 50;
 
 global ui_font: i32;
-global text_runs: TextRun[49];
-global sprites: Sprite[33];
+global text_runs: TextRun[50];
+global sprites: Sprite[32];
 global frame: HostFrame;
 global assets_loaded: bool;
 global audio_ready: bool;
+global prompt_audio_loaded: bool;
 global presented_audio_revision: i32;
 global audio_samples: f32[4096];
 global prompt_audio_assets: AudioAsset[3];
@@ -240,9 +242,6 @@ function load_assets(): void {
     if (!sprites[31].load_sprite_from("assets/goals/shape.svg", 100, 100)) {
         assets_loaded = false;
     }
-    if (!sprites[32].load_sprite_from("assets/ui/gear.svg", 100, 100)) {
-        assets_loaded = false;
-    }
     let number: i32 = 0;
     for (number = 0; number <= 30; number = number + 1) {
         if (!text_runs[number].load_text_from(ui_font, number_text(number))) {
@@ -303,11 +302,17 @@ function load_assets(): void {
     if (!text_runs[TEXT_PROMPT_NUMBER].load_text_from(ui_font, "123")) {
         assets_loaded = false;
     }
+    if (!text_runs[TEXT_MENU].load_text_from(ui_font, "MENU")) {
+        assets_loaded = false;
+    }
 }
 
 function ensure_audio(): void {
     if (!audio_ready) {
         audio_ready = audio_init(48000, 2, 2048);
+        if (audio_ready && !prompt_audio_loaded) {
+            load_prompt_audio();
+        }
     }
 }
 
@@ -334,6 +339,7 @@ function release_prompt_audio(): void {
     for (i = 0; i < 3; i = i + 1) {
         prompt_audio_assets[i].release();
     }
+    prompt_audio_loaded = false;
 }
 
 function load_prompt_audio(): void {
@@ -341,23 +347,26 @@ function load_prompt_audio(): void {
     if (!audio_ready) {
         return;
     }
-    prompt_audio_assets[GOAL_COLOR].load_audio("assets/audio/match-by-color.mp3");
-    prompt_audio_assets[GOAL_SHAPE].load_audio("assets/audio/match-by-shape.mp3");
-    prompt_audio_assets[GOAL_NUMBER].load_audio("assets/audio/match-by-number.mp3");
+    let color_loaded: bool = prompt_audio_assets[GOAL_COLOR].load_audio("assets/audio/match-by-color.mp3");
+    let shape_loaded: bool = prompt_audio_assets[GOAL_SHAPE].load_audio("assets/audio/match-by-shape.mp3");
+    let number_loaded: bool = prompt_audio_assets[GOAL_NUMBER].load_audio("assets/audio/match-by-number.mp3");
+    prompt_audio_loaded = color_loaded && shape_loaded && number_loaded;
 }
 
-function play_prompt_audio(): void {
+function play_prompt_audio(): bool {
     if (prompt_audio_voice > 0) {
         audio_stop(prompt_audio_voice);
         prompt_audio_voice = 0;
     }
     let goal: i32 = current_goal();
-    if (!audio_ready || game.voice_volume <= 0 || goal < GOAL_COLOR || goal > GOAL_NUMBER) {
-        return;
+    if (game.voice_volume <= 0 || goal < GOAL_COLOR || goal > GOAL_NUMBER) {
+        return true;
     }
-    if (prompt_audio_assets[goal].ready()) {
-        prompt_audio_voice = audio_play(prompt_audio_assets[goal].handle, false, voice_gain(), 0.0);
+    if (!audio_ready || !prompt_audio_assets[goal].ready()) {
+        return false;
     }
+    prompt_audio_voice = audio_play(prompt_audio_assets[goal].handle, false, voice_gain(), 0.0);
+    return prompt_audio_voice > 0;
 }
 
 function synchronize_prompt_volume(): void {
@@ -375,12 +384,14 @@ function present_audio_event(): void {
         return;
     }
     ensure_audio();
-    presented_audio_revision = game.audio_event_revision;
-    if (!audio_ready) {
+    if (game.audio_event == AUDIO_PROMPT) {
+        if (play_prompt_audio()) {
+            presented_audio_revision = game.audio_event_revision;
+        }
         return;
     }
-    if (game.audio_event == AUDIO_PROMPT) {
-        play_prompt_audio();
+    presented_audio_revision = game.audio_event_revision;
+    if (!audio_ready) {
         return;
     }
     let i: i32 = 0;
@@ -413,10 +424,10 @@ function main(): i32 {
     ui_font = load_font("assets/fonts/Basic-Regular.ttf", 48);
     load_assets();
     audio_ready = false;
+    prompt_audio_loaded = false;
     presented_audio_revision = 0;
     prompt_audio_voice = 0;
     ensure_audio();
-    load_prompt_audio();
     set_voice_volume(storage_load_i32("toddler_match", "voice_volume", 80));
     return 0;
 }
@@ -533,9 +544,11 @@ function draw_levels(): void {
     }
 }
 
-function draw_gear(): void {
+function draw_settings_button(): void {
+    fill_rect(738.0, 48.0, 130.0, 130.0, 0.78, 0.82, 0.85, 1.0);
     fill_rect(730.0, 40.0, 130.0, 130.0, 1.0, 1.0, 1.0, 1.0);
-    sprites[32].draw(745.0, 55.0, 255, 0);
+    fill_rect(730.0, 40.0, 10.0, 130.0, 0.13, 0.42, 0.63, 1.0);
+    draw_text(TEXT_MENU, 748.0, 82.0, 0.13, 0.42, 0.63, 1.0);
 }
 
 function draw_voice_percentage(): void {
@@ -648,7 +661,7 @@ function render(): i32 {
     } else {
         draw_play();
     }
-    draw_gear();
+    draw_settings_button();
     if (game.settings_open) {
         draw_settings();
     }
@@ -658,6 +671,8 @@ function render(): i32 {
 
 function on_code_swap(): void {
     load_assets();
-    load_prompt_audio();
+    if (audio_ready) {
+        load_prompt_audio();
+    }
     set_voice_volume(game.voice_volume);
 }

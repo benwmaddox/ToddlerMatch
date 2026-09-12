@@ -25,9 +25,9 @@ stasis package --target desktop --out dist/desktop
 stasis package-mobile --target android-arm64 --out dist/android
 ```
 
-`src/game.stasis` owns deterministic model, level generation, matching, shuffle, progression, settings state, input geometry, and audio events. `src/main.stasis` owns host input binding, persistent Voice Over volume, the three static prompt voiceovers, bounded procedural feedback audio, the 33-entry SVG cache, cached number text, and rendering. Rendering never advances gameplay, and opening Settings freezes round timers.
+`src/game.stasis` owns deterministic model, level generation, matching, shuffle, progression, settings state, input geometry, and audio events. `src/main.stasis` owns host input binding, persistent Voice Over volume, the three static prompt voiceovers, bounded procedural feedback audio, the 32-entry SVG cache, cached number text, and rendering. Rendering never advances gameplay, and opening Settings freezes round timers.
 
-The gear button opens a toddler-friendly Voice Over volume control on both screens. The generated prompt clips and their non-secret provenance live under `assets/audio/`; rerun `./tools/generate-voiceovers.ps1 -Force` with `ELEVENLABS_API_KEY` in the process environment or `D:\code\ChessTD\.env` to recreate them.
+The runtime-drawn `MENU` control opens a toddler-friendly Voice Over volume panel on both screens. The generated prompt clips and their non-secret provenance live under `assets/audio/`; rerun `./tools/generate-voiceovers.ps1 -Force` with `ELEVENLABS_API_KEY` in the process environment or `D:\code\ChessTD\.env` to recreate them.
 
 The project design framework under `docs/` records the source behavior map, design provenance, asset contracts, and runtime ownership boundaries.
 

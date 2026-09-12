@@ -21,6 +21,17 @@ function Add-Asset([string]$relative,[string]$body) {
   $canonical = "<svg xmlns=`"http://www.w3.org/2000/svg`" width=`"100`" height=`"100`" viewBox=`"0 0 100 100`">$body</svg>`n"
   $canonicalPath = Join-Path $assetRoot $relative
   if ($canonical -match '<(script|style|text|image|foreignObject|filter|mask|pattern|animate|animateTransform)\b' -or $canonical -match '(href|url\()') { throw "Forbidden SVG structure in $relative" }
+  [xml]$document = $canonical
+  if ($document.DocumentElement.LocalName -ne "svg" -or $document.DocumentElement.width -ne "100" -or $document.DocumentElement.height -ne "100" -or $document.DocumentElement.viewBox -ne "0 0 100 100") {
+    throw "Invalid SVG viewport contract in $relative"
+  }
+  $allowedElements = @("svg", "circle", "rect", "polygon", "path")
+  foreach ($element in $document.SelectNodes("//*")) {
+    if ($allowedElements -notcontains $element.LocalName) { throw "Unexpected SVG element $($element.LocalName) in $relative" }
+    foreach ($attribute in $element.Attributes) {
+      if ($attribute.LocalName -match '^(href|style)$' -or $attribute.LocalName -match '^on') { throw "Forbidden SVG attribute $($attribute.LocalName) in $relative" }
+    }
+  }
   $fixedPoint = $canonical -replace ">\s+<","><"
   if ($fixedPoint -cne $canonical) { throw "Optimizer fixed point failed for $relative" }
   if ($Check) {
@@ -39,8 +50,6 @@ Add-Asset "goals/color.svg" '<circle cx="30" cy="30" r="18" fill="#ff5252"/><cir
 Add-Asset "goals/shape.svg" '<rect x="10" y="10" width="30" height="30" fill="#666666"/><circle cx="70" cy="25" r="15" fill="#666666"/><polygon points="50,60 80,90 20,90" fill="#666666"/>'
 $fontPath = Join-Path $root "assets/fonts/Basic-Regular.ttf"
 if (!(Test-Path -LiteralPath $fontPath)) { throw "Missing checked-in font $fontPath" }
-$gearPath = Join-Path $root "assets/ui/gear.svg"
-if (!(Test-Path -LiteralPath $gearPath)) { throw "Missing checked-in gear icon $gearPath" }
 if ($Check) {
   $actualAssets = @(
     Get-ChildItem -File -Recurse $shapeRoot,$goalRoot -Filter '*.svg' |
@@ -64,13 +73,6 @@ $manifestAssets = @($assets | ForEach-Object {
     dependencies=@()
   }
 })
-$manifestAssets += [ordered]@{
-  id="ui_gear_svg"
-  path="assets/ui/gear.svg"
-  content_sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $gearPath).Hash.ToLowerInvariant()
-  format=[ordered]@{kind="sprite";encoding="svg";width=100;height=100}
-  dependencies=@()
-}
 $manifestAssets += [ordered]@{
   id="basic_font"
   path="assets/fonts/Basic-Regular.ttf"
@@ -106,7 +108,7 @@ $manifest = [ordered]@{
   }
   assets=$manifestAssets
 }
-$manifestText = ($manifest | ConvertTo-Json -Depth 8) + "`n"
+$manifestText = ($manifest | ConvertTo-Json -Depth 8 -Compress) + "`n"
 if ($Check) {
   if (!(Test-Path -LiteralPath $manifestPath)) { throw "Missing asset manifest $manifestPath" }
   if ((Get-Content -Raw -LiteralPath $manifestPath) -cne $manifestText) { throw "Asset manifest drift" }
