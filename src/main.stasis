@@ -499,7 +499,7 @@ function draw_card(number: i32, shape: i32, color: i32, x: f32, y: f32, w: f32, 
     let sx: f32 = ui_place_x(x, w, size, UiHorizontal.Center);
     let sy: f32 = ui_place_y(y, h, size, UiVertical.Center);
     if (shape >= 0 && shape < 6 && color >= 0 && color < 5) {
-        draw_sprite(sprites[asset_index(shape, color)].handle, sx, sy, size, size, 0, f32_to_i32(alpha * 255.0));
+        draw_sprite(sprites[asset_index(shape, color)].reference(), sx, sy, size, size, 0, f32_to_i32(alpha * 255.0));
     }
     if (number >= 0 && number <= 30) {
         let number_x: f32 = ui_place_x(x, w, text_runs[number].width, UiHorizontal.Center);

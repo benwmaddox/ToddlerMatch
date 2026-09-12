@@ -6,8 +6,8 @@
   "output": "build",
   "vendor": {
     "stasis": {
-      "release_id": "nightly-20260903-290",
-      "sha256": "e13d313cb429d478deac82f9a82423e344805b30597ecee2837eb91f472d099f"
+      "release_id": "nightly-20260912-317",
+      "sha256": "a95b7cb86055c35a16636be37e58d8e687a789ad6a8abe7f98e5c635e567a8e6"
     }
   },
   "android": {
@@ -16,5 +16,18 @@
     "orientation": "sensorPortrait",
     "version_code": 1,
     "version_name": "1.0.0"
+  },
+  "ai": {
+    "provider": null,
+    "openrouter": {
+      "approved_models": [
+        "openai/gpt-oss-120b"
+      ],
+      "min_throughput_tokens_per_second": 400,
+      "max_p50_latency_seconds": 2.0
+    },
+    "editor": {
+      "auto_persist_html_transcripts": false
+    }
   }
 }
