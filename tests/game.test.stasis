@@ -119,7 +119,41 @@ test `correct choices retire once and win at zero`(): bool {
             choose_option(index);
         }
     }
-    return game.phase == PHASE_WON && game.matches_remaining == 0 && game.audio_event == AUDIO_WIN;
+    return game.phase == PHASE_WON && game.matches_remaining == 0 && game.rounds_completed == 1 && game.audio_event == AUDIO_WIN;
+}
+
+test `starting and leaving a level reset round presentation`(): bool {
+    reset_game(93);
+    start_level(2);
+    game.rounds_completed = 4;
+    leave_level();
+    if (game.screen != SCREEN_LEVELS || game.phase != PHASE_ACTIVE) {
+        return false;
+    }
+    start_level(3);
+    return game.screen == SCREEN_PLAY && game.level == 3 && game.rounds_completed == 0;
+}
+
+test `completed rounds advance once per generated prompt`(): bool {
+    reset_game(97);
+    start_level(1);
+    if (displayed_round() != 1) {
+        return false;
+    }
+    let index: i32 = 0;
+    let guard: i32 = 0;
+    for (guard = 0; guard < 9 && game.phase == PHASE_ACTIVE; guard = guard + 1) {
+        index = find_match();
+        if (index >= 0) {
+            choose_option(index);
+        }
+    }
+    if (game.phase != PHASE_WON || game.rounds_completed != 1 || displayed_round() != 1) {
+        return false;
+    }
+    game.phase_ticks = WIN_TICKS - 1;
+    advance_game_tick();
+    return game.phase == PHASE_PROMPT_FADE && game.rounds_completed == 1 && displayed_round() == 2;
 }
 
 test `level one shakes and later levels shuffle on mistakes`(): bool {
@@ -140,7 +174,7 @@ test `level one shakes and later levels shuffle on mistakes`(): bool {
         return false;
     }
     choose_option(wrong);
-    return game.shake_index == -1 && game.shuffle_revision == 1 && game.audio_event == AUDIO_WRONG;
+    return game.shake_index == -1 && game.shuffle_revision == 1 && game.shuffle_ticks == SHUFFLE_TICKS && game.audio_event == AUDIO_WRONG;
 }
 
 test `later-level shuffle always changes remaining card order`(): bool {
@@ -155,7 +189,21 @@ test `later-level shuffle always changes remaining card order`(): bool {
     game.options[1].color = 1;
     game.options[1].matched = false;
     shuffle_unmatched();
-    return game.options[0].number == 2 && game.options[1].number == 1 && game.shuffle_revision == 1;
+    if (
+        game.options[0].number != 2
+        || game.options[1].number != 1
+        || game.shuffle_from[0] != 1
+        || game.shuffle_from[1] != 0
+        || game.shuffle_revision != 1
+        || game.shuffle_ticks != SHUFFLE_TICKS
+    ) {
+        return false;
+    }
+    let i: i32 = 0;
+    for (i = 0; i < SHUFFLE_TICKS; i = i + 1) {
+        advance_game_tick();
+    }
+    return game.shuffle_ticks == 0;
 }
 
 test `prompt replay is active-only and reset-safe`(): bool {
@@ -177,6 +225,9 @@ test `prompt replay is active-only and reset-safe`(): bool {
 test `win and prompt transitions use exact toddler pacing`(): bool {
     reset_game(53);
     start_level(1);
+    if (WIN_TICKS != 180) {
+        return false;
+    }
     game.phase = PHASE_WON;
     game.phase_ticks = WIN_TICKS - 1;
     advance_game_tick();
@@ -204,22 +255,22 @@ test `logical pointer boundaries and round trips are exact`(): bool {
     return round_trip == x && map_pointer_axis(-1.0, 1440.0, 900.0) == 0.0 && map_pointer_axis(1441.0, 1440.0, 900.0) == 900.0;
 }
 
-test `shared axis placement centers shape art in every card layout`(): bool {
+test `shape art keeps its horizontal center and lowered card placement`(): bool {
     let target_x: f32 = ui_place_x(330.0, 240.0, 150.0, UiHorizontal.Center);
-    let target_y: f32 = ui_place_y(230.0, 330.0, 150.0, UiVertical.Center);
-    if (!ui_audit_centered_x(330.0, 240.0, target_x, 150.0, 0.0) || !ui_audit_centered_y(230.0, 330.0, target_y, 150.0, 0.0)) {
+    let target_y: f32 = ui_place_y(230.0, 330.0, 150.0, UiVertical.Center) + 20.0;
+    if (!ui_audit_centered_x(330.0, 240.0, target_x, 150.0, 0.0) || target_y != 340.0 || target_y + 150.0 > 560.0) {
         return false;
     }
 
     let option_x: f32 = ui_place_x(54.0, 240.0, 150.0, UiHorizontal.Center);
-    let option_y: f32 = ui_place_y(1030.0, 320.0, 150.0, UiVertical.Center);
-    if (!ui_audit_centered_x(54.0, 240.0, option_x, 150.0, 0.0) || !ui_audit_centered_y(1030.0, 320.0, option_y, 150.0, 0.0)) {
+    let option_y: f32 = ui_place_y(1030.0, 320.0, 150.0, UiVertical.Center) + 20.0;
+    if (!ui_audit_centered_x(54.0, 240.0, option_x, 150.0, 0.0) || option_y != 1135.0 || option_y + 150.0 > 1350.0) {
         return false;
     }
 
     let compact_x: f32 = ui_place_x(54.0, 240.0, 116.0, UiHorizontal.Center);
-    let compact_y: f32 = ui_place_y(960.0, 250.0, 116.0, UiVertical.Center);
-    return ui_audit_centered_x(54.0, 240.0, compact_x, 116.0, 0.0) && ui_audit_centered_y(960.0, 250.0, compact_y, 116.0, 0.0);
+    let compact_y: f32 = ui_place_y(960.0, 250.0, 116.0, UiVertical.Center) + 20.0;
+    return ui_audit_centered_x(54.0, 240.0, compact_x, 116.0, 0.0) && compact_y == 1047.0 && compact_y + 116.0 <= 1210.0;
 }
 
 test `orientation recreation keeps authoritative state`(): bool {
