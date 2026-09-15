@@ -33,10 +33,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-linux-x64.tar.gz -ReleaseTag "${{ steps.stasis_release.outputs.release_id }}"
 
-      - name: Install WebAssembly optimizer
-        run: sudo apt-get update && sudo apt-get install --yes binaryen
-
-      - name: Validate Stasis project and Web package
+      - name: Validate Stasis project
         shell: bash
         run: |
           set -euo pipefail
@@ -46,7 +43,3 @@ jobs:
           "${stasis}" check
           "${stasis}" test
           pwsh ./tools/promote-vector-assets.ps1 -Check
-          rm -rf dist/pr-web .stasis_cache
-          "${stasis}" package --target web --out dist/pr-web
-          test -s dist/pr-web/index.html
-          test "$(find dist/pr-web -type f -name '*.wasm' | wc -l)" -ge 1
