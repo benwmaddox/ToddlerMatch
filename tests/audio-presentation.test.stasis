@@ -37,3 +37,25 @@ test `menu pointer exits play and commits prompt stop`(): bool {
     present_audio_event();
     return presented_audio_revision == game.audio_event_revision && prompt_audio_voice == 0;
 }
+
+test `help pointer opens help and menu returns to levels`(): bool {
+    if (
+        !help_menu_link_at(330.0, 390.0)
+        || !help_menu_link_at(570.0, 480.0)
+        || help_menu_link_at(329.99, 435.0)
+        || help_menu_link_at(570.01, 435.0)
+        || !maddoxlabs_link_at(150.0, 1470.0)
+        || !maddoxlabs_link_at(750.0, 1650.0)
+        || maddoxlabs_link_at(149.99, 1560.0)
+        || maddoxlabs_link_at(750.01, 1560.0)
+    ) {
+        return false;
+    }
+    reset_game(137);
+    handle_pointer(450.0, 435.0);
+    if (game.screen != SCREEN_HELP) {
+        return false;
+    }
+    handle_pointer(795.0, 105.0);
+    return game.screen == SCREEN_LEVELS && game.pointer_consumed_count == 2;
+}
