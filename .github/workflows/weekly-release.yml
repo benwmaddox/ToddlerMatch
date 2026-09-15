@@ -245,6 +245,10 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v3
+        with:
+          # The legacy `tools` SDK package was removed from Google's catalog.
+          # This job installs its exact platform/build/NDK packages below.
+          packages: ""
       - name: Install pinned Android SDK components
         shell: pwsh
         run: |
