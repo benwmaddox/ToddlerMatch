@@ -58,7 +58,7 @@ project:
   conversion_status: converted
   depth_render_order: card shadow, card face, runtime number, canonical SVG shape
   material_recipes: exact flat fills; curvy shape uses exact flat stroke
-  shared_component_library: shared 100x100 viewBox and centered card placement contract
+  shared_component_library: shared 100x100 viewBox; shapes remain horizontally centered and use a deliberate +20 logical-pixel vertical card offset to separate them from the enlarged number run
   detail_tiers: silhouettes and goal landmarks must read at 112px; no inspection-only micro-detail
   detail_readability_floor: 12 logical pixels at the smallest displayed goal mark; 30 logical pixels at shape display
   scale_footprint_padding: Shapes occupy at most 96% of 100x100; target display 220x220; option display 150x150 or 116x116 for nine choices.

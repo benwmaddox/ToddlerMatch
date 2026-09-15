@@ -20,6 +20,9 @@ const AUDIO_CORRECT: i32 = 1;
 const AUDIO_WRONG: i32 = 2;
 const AUDIO_WIN: i32 = 3;
 const AUDIO_PROMPT: i32 = 4;
+const AUDIO_STOP_PROMPT: i32 = 5;
+
+global game: MatchState;
 
 struct Card {
     number: i32;
@@ -57,8 +60,6 @@ struct MatchState {
     settings_open: bool;
     voice_volume: i32;
 }
-
-global game: MatchState;
 
 function reset_game(seed: i32): void {
     game.screen = SCREEN_LEVELS;
@@ -230,17 +231,19 @@ function target_shape(): i32 {
 }
 
 function displayed_round(): i32 {
-    let round: i32 = game.rounds_completed + 1;
-    if (game.phase == PHASE_WON) {
-        round = game.rounds_completed;
-    }
-    if (round < 1) {
+    if (game.rounds_completed < 0) {
         return 1;
     }
-    if (round > 30) {
-        return 30;
+    if (game.phase == PHASE_WON) {
+        if (game.rounds_completed < 1) {
+            return 1;
+        }
+        return game.rounds_completed;
     }
-    return round;
+    if (game.rounds_completed == 2147483647) {
+        return 2147483647;
+    }
+    return game.rounds_completed + 1;
 }
 
 function emit_audio(event_kind: i32): void {
@@ -263,6 +266,7 @@ function leave_level(): void {
     game.shake_index = -1;
     game.shake_ticks = 0;
     game.shuffle_ticks = 0;
+    emit_audio(AUDIO_STOP_PROMPT);
 }
 
 function shuffle_unmatched(): void {

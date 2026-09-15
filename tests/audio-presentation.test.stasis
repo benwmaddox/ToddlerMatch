@@ -25,3 +25,15 @@ test `procedural cue revisions commit without audio availability`(): bool {
     present_audio_event();
     return presented_audio_revision == game.audio_event_revision;
 }
+
+test `menu pointer exits play and commits prompt stop`(): bool {
+    reset_game(395);
+    start_level(2);
+    presented_audio_revision = game.audio_event_revision;
+    handle_pointer(795.0, 105.0);
+    if (game.screen != SCREEN_LEVELS || game.audio_event != AUDIO_STOP_PROMPT) {
+        return false;
+    }
+    present_audio_event();
+    return presented_audio_revision == game.audio_event_revision && prompt_audio_voice == 0;
+}

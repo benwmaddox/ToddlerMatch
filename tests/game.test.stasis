@@ -126,8 +126,14 @@ test `starting and leaving a level reset round presentation`(): bool {
     reset_game(93);
     start_level(2);
     game.rounds_completed = 4;
+    let audio_before: i32 = game.audio_event_revision;
     leave_level();
-    if (game.screen != SCREEN_LEVELS || game.phase != PHASE_ACTIVE) {
+    if (
+        game.screen != SCREEN_LEVELS
+        || game.phase != PHASE_ACTIVE
+        || game.audio_event != AUDIO_STOP_PROMPT
+        || game.audio_event_revision != audio_before + 1
+    ) {
         return false;
     }
     start_level(3);
@@ -322,4 +328,16 @@ test `settings freeze ticks and block prompt actions`(): bool {
     close_settings();
     advance_game_tick();
     return !game.settings_open && game.phase == PHASE_PROMPT_FADE && game.tick_count == tick_before + 1;
+}
+
+test `round display remains accurate beyond the level number range`(): bool {
+    reset_game(99);
+    start_level(4);
+    game.rounds_completed = 30;
+    if (displayed_round() != 31) {
+        return false;
+    }
+    game.phase = PHASE_WON;
+    game.rounds_completed = 31;
+    return displayed_round() == 31;
 }

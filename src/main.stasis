@@ -5,7 +5,7 @@ import "/vendor/stasis/stdlib/storage.stasis";
 import "/vendor/stasis/stdlib/ui_axis_layout.stasis";
 import "game.stasis";
 
-// Nightly 290's packaged Web host exposes the stable audio_* ABI while its AudioStream wrapper imports newer stasis_jit_audio_* names.
+// Packaged hosts expose this stable audio_* ABI while the typed stdlib wrapper uses internal stasis_jit_audio_* imports.
 extern function @effects(audio) audio_init(sample_rate: i32, channels: i32, target_latency_frames: i32): bool;
 extern function @effects(audio) audio_push_f32_interleaved(samples: f32[], frame_count: i32): i32;
 extern function @effects(audio) audio_play(asset_handle: i32, loop: bool, volume: f32, pan: f32): i32;
@@ -348,10 +348,7 @@ function voice_gain(): f32 {
 }
 
 function release_prompt_audio(): void {
-    if (prompt_audio_voice > 0) {
-        audio_stop(prompt_audio_voice);
-        prompt_audio_voice = 0;
-    }
+    stop_prompt_audio();
     let i: i32 = 0;
     for (i = 0; i < 3; i = i + 1) {
         prompt_audio_assets[i].release();
@@ -371,10 +368,7 @@ function load_prompt_audio(): void {
 }
 
 function play_prompt_audio(): bool {
-    if (prompt_audio_voice > 0) {
-        audio_stop(prompt_audio_voice);
-        prompt_audio_voice = 0;
-    }
+    stop_prompt_audio();
     let goal: i32 = current_goal();
     if (game.voice_volume <= 0 || goal < GOAL_COLOR || goal > GOAL_NUMBER) {
         return true;
@@ -398,6 +392,11 @@ function synchronize_prompt_volume(): void {
 
 function present_audio_event(): void {
     if (presented_audio_revision == game.audio_event_revision) {
+        return;
+    }
+    if (game.audio_event == AUDIO_STOP_PROMPT) {
+        stop_prompt_audio();
+        presented_audio_revision = game.audio_event_revision;
         return;
     }
     ensure_audio();
@@ -438,10 +437,7 @@ function present_audio_event(): void {
 function main(): i32 {
     reset_game(395);
     init_window(LOGICAL_WIDTH, LOGICAL_HEIGHT, "Toddler Match");
-    ui_font = load_font("assets/fonts/Basic-Regular.ttf", 48);
-    number_font = load_font("assets/fonts/Basic-Regular.ttf", 80);
-    celebration_font = load_font("assets/fonts/Basic-Regular.ttf", 72);
-    load_assets();
+    load_render_resources();
     audio_ready = false;
     prompt_audio_loaded = false;
     presented_audio_revision = 0;
@@ -627,7 +623,7 @@ function draw_play(): void {
     draw_text(TEXT_LEVEL, 60.0, 58.0, 0.15, 0.20, 0.22, 1.0);
     draw_text(game.level, 240.0, 58.0, 0.15, 0.20, 0.22, 1.0);
     draw_text(TEXT_ROUND, 360.0, 58.0, 0.15, 0.20, 0.22, 1.0);
-    draw_text(displayed_round(), 570.0, 58.0, 0.15, 0.20, 0.22, 1.0);
+    draw_round_number(displayed_round(), 570.0, 58.0);
     let prompt_alpha: f32 = 1.0;
     if (game.phase == PHASE_WON) {
         prompt_alpha = 1.0 - i32_to_f32(game.phase_ticks) / i32_to_f32(PROMPT_FADE_TICKS);
@@ -732,9 +728,49 @@ function render(): i32 {
 }
 
 function on_code_swap(): void {
-    load_assets();
+    load_render_resources();
     if (audio_ready) {
         load_prompt_audio();
     }
     set_voice_volume(game.voice_volume);
+}
+
+function load_render_resources(): void {
+    ui_font = load_font("assets/fonts/Basic-Regular.ttf", 48);
+    number_font = load_font("assets/fonts/Basic-Regular.ttf", 80);
+    celebration_font = load_font("assets/fonts/Basic-Regular.ttf", 72);
+    let fonts_ready: bool = ui_font > 0 && number_font > 0 && celebration_font > 0;
+    load_assets();
+    if (!fonts_ready) {
+        assets_loaded = false;
+    }
+}
+
+function stop_prompt_audio(): void {
+    if (prompt_audio_voice > 0) {
+        audio_stop(prompt_audio_voice);
+        prompt_audio_voice = 0;
+    }
+}
+
+function draw_round_number(value: i32, x: f32, y: f32): void {
+    let round: i32 = value;
+    if (round < 1) {
+        round = 1;
+    }
+    let divisor: i32 = 1;
+    let step: i32 = 0;
+    for (step = 0; step < 9 && round / divisor >= 10; step = step + 1) {
+        divisor = divisor * 10;
+    }
+    let cursor_x: f32 = x;
+    for (step = 0; step < 10; step = step + 1) {
+        let digit: i32 =(round / divisor) % 10;
+        draw_text(digit, cursor_x, y, 0.15, 0.20, 0.22, 1.0);
+        cursor_x = cursor_x + text_runs[digit].width + 2.0;
+        if (divisor == 1) {
+            return;
+        }
+        divisor = divisor / 10;
+    }
 }
