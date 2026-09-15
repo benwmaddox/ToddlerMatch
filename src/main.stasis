@@ -1,6 +1,7 @@
 import "/vendor/stasis/stdlib/stdlib.stasis";
 import "/vendor/stasis/stdlib/graphics.stasis";
 import "/vendor/stasis/stdlib/host_frame.stasis";
+import "/vendor/stasis/stdlib/external_url.stasis";
 import "/vendor/stasis/stdlib/storage.stasis";
 import "/vendor/stasis/stdlib/ui_axis_layout.stasis";
 import "game.stasis";
@@ -33,12 +34,19 @@ const TEXT_NEXT_SOON: i32 = 47;
 const TEXT_PROMPT_NUMBER: i32 = 48;
 const TEXT_MENU: i32 = 49;
 const TEXT_ROUND: i32 = 50;
-const TEXT_RUN_COUNT: i32 = 51;
+const TEXT_HELP: i32 = 51;
+const TEXT_HOW_TO_PLAY: i32 = 52;
+const TEXT_HELP_LOOK: i32 = 53;
+const TEXT_HELP_RULE: i32 = 54;
+const TEXT_HELP_TAP: i32 = 55;
+const TEXT_HELP_TRY: i32 = 56;
+const TEXT_MADDOXLABS: i32 = 57;
+const TEXT_RUN_COUNT: i32 = 58;
 
 global ui_font: i32;
 global number_font: i32;
 global celebration_font: i32;
-global text_runs: TextRun[51];
+global text_runs: TextRun[58];
 global number_runs: TextRun[31];
 global celebration_runs: TextRun[2];
 global sprites: Sprite[32];
@@ -316,6 +324,27 @@ function load_assets(): void {
     if (!text_runs[TEXT_ROUND].load_text_from(ui_font, "ROUND")) {
         assets_loaded = false;
     }
+    if (!text_runs[TEXT_HELP].load_text_from(ui_font, "HELP")) {
+        assets_loaded = false;
+    }
+    if (!text_runs[TEXT_HOW_TO_PLAY].load_text_from(ui_font, "HOW TO PLAY")) {
+        assets_loaded = false;
+    }
+    if (!text_runs[TEXT_HELP_LOOK].load_text_from(ui_font, "LOOK AT THE BIG CARD")) {
+        assets_loaded = false;
+    }
+    if (!text_runs[TEXT_HELP_RULE].load_text_from(ui_font, "CHECK COLOR SHAPE OR NUMBER")) {
+        assets_loaded = false;
+    }
+    if (!text_runs[TEXT_HELP_TAP].load_text_from(ui_font, "TAP EVERY CARD THAT MATCHES")) {
+        assets_loaded = false;
+    }
+    if (!text_runs[TEXT_HELP_TRY].load_text_from(ui_font, "IF YOU MISS TRY AGAIN")) {
+        assets_loaded = false;
+    }
+    if (!text_runs[TEXT_MADDOXLABS].load_text_from(ui_font, "VISIT MADDOXLABS.COM")) {
+        assets_loaded = false;
+    }
     if (!celebration_runs[0].load_text_from(celebration_font, "GREAT JOB!")) {
         assets_loaded = false;
     }
@@ -474,18 +503,30 @@ function handle_pointer(px: f32, py: f32): void {
     if (point_in_rect(px, py, 730.0, 40.0, 130.0, 130.0)) {
         if (game.screen == SCREEN_PLAY) {
             leave_level();
+        } else if (game.screen == SCREEN_HELP) {
+            close_help();
         } else {
             open_settings();
         }
         return;
     }
     if (game.screen == SCREEN_LEVELS) {
+        if (help_menu_link_at(px, py)) {
+            open_help();
+            return;
+        }
         let level: i32 = 0;
         for (level = 1; level <= 4; level = level + 1) {
             if (point_in_rect(px, py, 80.0, 500.0 + i32_to_f32(level - 1) * 310.0, 740.0, 250.0)) {
                 start_level(level);
                 return;
             }
+        }
+        return;
+    }
+    if (game.screen == SCREEN_HELP) {
+        if (maddoxlabs_link_at(px, py)) {
+            open_external_url("https://maddoxlabs.com");
         }
         return;
     }
@@ -558,6 +599,9 @@ function draw_card(number: i32, shape: i32, color: i32, x: f32, y: f32, w: f32, 
 function draw_levels(): void {
     draw_text(TEXT_TODDLER_MATCH, 245.0, 230.0, 0.15, 0.20, 0.22, 1.0);
     draw_text(TEXT_CHOOSE_LEVEL, 270.0, 330.0, 0.27, 0.35, 0.39, 1.0);
+    let help_x: f32 = ui_place_x(330.0, 240.0, text_runs[TEXT_HELP].width, UiHorizontal.Center);
+    draw_text(TEXT_HELP, help_x, 405.0, 0.13, 0.42, 0.63, 1.0);
+    fill_rect(330.0, 468.0, 240.0, 4.0, 0.13, 0.42, 0.63, 1.0);
     let level: i32 = 1;
     for (level = 1; level <= 4; level = level + 1) {
         let y: f32 = 500.0 + i32_to_f32(level - 1) * 310.0;
@@ -716,6 +760,8 @@ function render(): i32 {
     clear(0.94, 0.96, 0.97, 1.0);
     if (game.screen == SCREEN_LEVELS) {
         draw_levels();
+    } else if (game.screen == SCREEN_HELP) {
+        draw_help();
     } else {
         draw_play();
     }
@@ -773,4 +819,36 @@ function draw_round_number(value: i32, x: f32, y: f32): void {
         }
         divisor = divisor / 10;
     }
+}
+
+function draw_help(): void {
+    let title_x: f32 = ui_place_x(0.0, 900.0, text_runs[TEXT_HOW_TO_PLAY].width, UiHorizontal.Center);
+    draw_text(TEXT_HOW_TO_PLAY, title_x, 270.0, 0.15, 0.20, 0.22, 1.0);
+    let labels: i32[4];
+    labels[0] = TEXT_HELP_LOOK;
+    labels[1] = TEXT_HELP_RULE;
+    labels[2] = TEXT_HELP_TAP;
+    labels[3] = TEXT_HELP_TRY;
+    let step: i32 = 0;
+    for (step = 0; step < 4; step = step + 1) {
+        let y: f32 = 430.0 + i32_to_f32(step) * 245.0;
+        fill_rect(88.0, y + 12.0, 740.0, 190.0, 0.78, 0.82, 0.85, 1.0);
+        fill_rect(80.0, y, 740.0, 190.0, 1.0, 1.0, 1.0, 1.0);
+        let label_x: f32 = ui_place_x(80.0, 740.0, text_runs[labels[step]].width, UiHorizontal.Center);
+        let label_y: f32 = ui_place_y(y, 190.0, text_runs[labels[step]].height, UiVertical.Center);
+        draw_text(labels[step], label_x, label_y, 0.15, 0.20, 0.22, 1.0);
+    }
+    fill_rect(158.0, 1482.0, 600.0, 180.0, 0.08, 0.28, 0.42, 1.0);
+    fill_rect(150.0, 1470.0, 600.0, 180.0, 0.13, 0.42, 0.63, 1.0);
+    let link_x: f32 = ui_place_x(150.0, 600.0, text_runs[TEXT_MADDOXLABS].width, UiHorizontal.Center);
+    let link_y: f32 = ui_place_y(1470.0, 180.0, text_runs[TEXT_MADDOXLABS].height, UiVertical.Center);
+    draw_text(TEXT_MADDOXLABS, link_x, link_y, 1.0, 1.0, 1.0, 1.0);
+}
+
+function help_menu_link_at(px: f32, py: f32): bool {
+    return point_in_rect(px, py, 330.0, 390.0, 240.0, 90.0);
+}
+
+function maddoxlabs_link_at(px: f32, py: f32): bool {
+    return point_in_rect(px, py, 150.0, 1470.0, 600.0, 180.0);
 }

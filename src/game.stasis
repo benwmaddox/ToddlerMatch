@@ -5,6 +5,7 @@ const LOGICAL_HEIGHT: i32 = 2000;
 const MAX_OPTIONS: i32 = 9;
 const SCREEN_LEVELS: i32 = 0;
 const SCREEN_PLAY: i32 = 1;
+const SCREEN_HELP: i32 = 2;
 const PHASE_ACTIVE: i32 = 0;
 const PHASE_WON: i32 = 1;
 const PHASE_PROMPT_FADE: i32 = 2;
@@ -466,4 +467,16 @@ function logical_to_viewport_axis(logical_position: f32, viewport: f32, logical:
         return 0.0;
     }
     return logical_position * viewport / logical;
+}
+
+function open_help(): void {
+    if (game.screen == SCREEN_LEVELS && !game.settings_open) {
+        game.screen = SCREEN_HELP;
+    }
+}
+
+function close_help(): void {
+    if (game.screen == SCREEN_HELP) {
+        game.screen = SCREEN_LEVELS;
+    }
 }

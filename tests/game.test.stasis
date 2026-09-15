@@ -341,3 +341,18 @@ test `round display remains accurate beyond the level number range`(): bool {
     game.rounds_completed = 31;
     return displayed_round() == 31;
 }
+
+test `help navigation is bounded to the level menu`(): bool {
+    reset_game(131);
+    open_help();
+    if (game.screen != SCREEN_HELP) {
+        return false;
+    }
+    close_help();
+    if (game.screen != SCREEN_LEVELS) {
+        return false;
+    }
+    start_level(1);
+    open_help();
+    return game.screen == SCREEN_PLAY;
+}
