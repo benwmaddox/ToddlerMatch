@@ -1,0 +1,5 @@
+import "../src/main.stasis";
+
+test `render preparation only begins legacy manual frames`(): bool {
+    return should_begin_render_frame(false) && !should_begin_render_frame(true);
+}
