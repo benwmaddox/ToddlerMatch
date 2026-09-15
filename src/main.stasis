@@ -653,8 +653,20 @@ function draw_play(): void {
     }
 }
 
+function should_begin_render_frame(host_construction_active: bool): bool {
+    return !host_construction_active;
+}
+
+function @effects(graphics) prepare_render_frame(): void {
+    // New hosts begin construction before calling render(). Legacy/manual
+    // runners still need the game to reset the command buffer itself.
+    if (should_begin_render_frame(gfx_frame_construction_active)) {
+        begin_frame();
+    }
+}
+
 function render(): i32 {
-    begin_frame();
+    prepare_render_frame();
     clear(0.94, 0.96, 0.97, 1.0);
     if (game.screen == SCREEN_LEVELS) {
         draw_levels();
