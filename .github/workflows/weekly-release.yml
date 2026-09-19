@@ -9,7 +9,7 @@ on:
       force_build:
         description: Build and publish even when the weekly baseline is unchanged
         required: true
-        default: true
+        default: false
         type: boolean
 concurrency:
   group: toddler-match-weekly-release-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.force_build == true }}
@@ -38,22 +38,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve complete immutable Stasis nightly
-        id: nightly
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          $ErrorActionPreference = "Stop"
-          $project = Get-Content stasis.json -Raw | ConvertFrom-Json
-          $tag = [string]$project.vendor.stasis.release_id
-          if ($env:EVENT_NAME -eq "workflow_dispatch") {
-            $tag = (./tools/resolve-stasis-nightly.ps1 | Out-String).Trim()
-          }
-          if ($tag -notmatch '^nightly-[0-9]{8}-[0-9]+$') { throw "Unable to resolve a valid Stasis nightly: $tag" }
-          "tag=$tag" >> $env:GITHUB_OUTPUT
-
       - name: Audit canonical vector assets
         shell: pwsh
         run: ./tools/promote-vector-assets.ps1 -Check
@@ -65,19 +49,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
           FORCE_BUILD: ${{ inputs.force_build }}
-          NIGHTLY_TAG: ${{ steps.nightly.outputs.tag }}
           RUN_NUMBER: ${{ github.run_number }}
         run: |
           $ErrorActionPreference = "Stop"
-          # Weekly releases are game-owned source/assets/workflow releases.
-          # Vendor and manifest-only Stasis changes are deliberately deferred
-          # to quarterly-stasis.yml.
+          # Weekly releases use the exact Stasis pin checked into this commit.
+          # A quarterly pin PR is intentionally just a dependency change; once
+          # merged, this normal release workflow owns the one all-target build.
           $buildPaths = @(
             ".github/workflows/weekly-release.yml",
             "assets",
             "branding",
             "src",
             "tests",
+            "stasis.json",
+            "vendor/stasis",
             "tools/apply-branding.ps1",
             "tools/build-android-apk.ps1",
             "tools/promote-vector-assets.ps1"
@@ -129,19 +114,21 @@ jobs:
             } else { $shouldBuild = $true }
           }
           $project = Get-Content stasis.json -Raw | ConvertFrom-Json
+          $pinnedStasis = [string]$project.vendor.stasis.release_id
+          if ($pinnedStasis -notmatch '^nightly-[0-9]{8}-[0-9]+$') { throw "Invalid checked-in Stasis release: $pinnedStasis" }
           $baseVersion = [string]($project.android.version_name)
           if ([string]::IsNullOrWhiteSpace($baseVersion)) { throw "stasis.json has no android.version_name base version" }
           $productVersion = "$baseVersion-weekly.$env:RUN_NUMBER"
           $releaseTag = "weekly-$((Get-Date).ToUniversalTime().ToString('yyyyMMdd'))-$env:RUN_NUMBER"
           "should_build=$($shouldBuild.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           "previous_source_commit=$previousSource" >> $env:GITHUB_OUTPUT
-          "stasis_release=$env:NIGHTLY_TAG" >> $env:GITHUB_OUTPUT
+          "stasis_release=$pinnedStasis" >> $env:GITHUB_OUTPUT
           "product_version=$productVersion" >> $env:GITHUB_OUTPUT
           "release_tag=$releaseTag" >> $env:GITHUB_OUTPUT
           "source_compare_url=$compareUrl" >> $env:GITHUB_OUTPUT
           "scheduled=$($scheduled.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
-          if ($shouldBuild) { "Build required: game-owned source/assets/workflow changes or an explicit manual force." >> $env:GITHUB_STEP_SUMMARY }
-          else { "No game-owned source/assets/workflow changes since the latest published scheduled release; Stasis-only drift is deferred to the quarterly refresh." >> $env:GITHUB_STEP_SUMMARY }
+          if ($shouldBuild) { "Build required: shipped source/assets, checked-in Stasis pin/vendor, workflow changes, or an explicit manual force. Using checked-in Stasis $pinnedStasis." >> $env:GITHUB_STEP_SUMMARY }
+          else { "No shipped source, checked-in Stasis pin/vendor, or release-workflow changes since the latest published scheduled release; no release fanout is needed. Using checked-in Stasis $pinnedStasis." >> $env:GITHUB_STEP_SUMMARY }
 
   preflight:
     needs: metadata
@@ -160,7 +147,7 @@ jobs:
         run: |
           set -euo pipefail
           stasis="$PWD/.release-toolchain/bin/stasis"
-          "$stasis" vendor update --workspace "$PWD"
+          "$stasis" vendor status --workspace "$PWD"
           pwsh ./tools/promote-vector-assets.ps1 -Check
           "$stasis" fmt --check
           "$stasis" check
@@ -195,7 +182,7 @@ jobs:
         run: |
           set -euo pipefail
           stasis="${PWD}/.release-toolchain/bin/stasis"
-          "${stasis}" vendor update --workspace "${PWD}"
+          "${stasis}" vendor status --workspace "${PWD}"
           "${stasis}" fmt --check
           "${stasis}" check
           "${stasis}" test
@@ -210,8 +197,8 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $stasis = (Resolve-Path ./.release-toolchain/stasis.exe).Path
-          & $stasis vendor update --workspace (Get-Location).Path
-          if ($LASTEXITCODE -ne 0) { throw "Stasis vendor update failed" }
+          & $stasis vendor status --workspace (Get-Location).Path
+          if ($LASTEXITCODE -ne 0) { throw "Stasis vendor status failed" }
           & $stasis fmt --check
           if ($LASTEXITCODE -ne 0) { throw "Stasis fmt --check failed" }
           & $stasis check
@@ -314,7 +301,7 @@ jobs:
         run: |
           set -euo pipefail
           stasis="${PWD}/.release-toolchain/bin/stasis"
-          "${stasis}" vendor update --workspace "${PWD}"
+          "${stasis}" vendor status --workspace "${PWD}"
           "${stasis}" fmt --check
           "${stasis}" check
           "${stasis}" test

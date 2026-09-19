@@ -49,13 +49,17 @@ required pull-request check.
 PR validation is reproducible and current-head: it uses the checked-in
 `vendor.stasis.release_id` and `vendor.stasis.sha256` pair, so a source change
 cannot silently switch compiler versions between pushes. Scheduled release
-logic may resolve the newest complete Stasis nightly when it is deliberately
-building a newer release. That newest-release lookup stays out of PR jobs,
-avoiding an extra GitHub API call and preventing a moving toolchain from
-repeating expensive validation on each commit.
+The normal weekly release workflow uses the exact checked-in pin for both
+source releases and the release caused by a merged Stasis pin. It treats
+`stasis.json` and `vendor/stasis` as shipped inputs, so a merged pin causes one
+ordinary all-target release matrix. It never resolves a moving nightly or
+mutates the checked-in vendor snapshot during that release.
 
-After the quarterly cross-platform matrix succeeds, automation creates or
-updates a dedicated PR containing the new `stasis.json` pin and `vendor/stasis`
-snapshot. It never pushes a dependency pin directly to `master`; it explicitly
-dispatches the cheap branch gate because a pull request created by the built-in
-GitHub token does not emit a normal `pull_request` workflow event.
+The quarterly workflow is intentionally separate and cheap: on its stable
+quarter-start schedule it resolves the newest complete immutable nightly,
+refreshes `stasis.json` and `vendor/stasis`, performs only mechanical identity
+and vendor-status checks, and creates or updates a dedicated pin PR. It never
+builds desktop, Android, or Web artifacts and never pushes a dependency pin
+directly to `master`. It leaves the dedicated pin PR for normal review and
+merge; the next normal weekly release consumes the checked-in pin and is where
+compatibility is discovered after that PR is merged.
