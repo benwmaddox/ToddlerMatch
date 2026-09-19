@@ -365,6 +365,15 @@ async function main() {
   const playwright = loadPlaywright(args.playwrightModule || process.env.PLAYWRIGHT_MODULE || "");
   const browserType = args.browser === "firefox" ? playwright.firefox : playwright.chromium;
   const launchOptions = { headless: true };
+  if (args.browser === "firefox") {
+    // Hosted Linux runners do not expose a hardware GL device to headless
+    // Firefox. Force its supported software WebGL path so this acceptance
+    // still exercises the packaged WebGL2 renderer and game behavior.
+    launchOptions.firefoxUserPrefs = {
+      "webgl.force-enabled": true,
+      "webgl.forbid-software": false
+    };
+  }
   if (args.browserExecutable) launchOptions.executablePath = args.browserExecutable;
   if (args.noSandbox && args.browser === "chromium") launchOptions.args = ["--no-sandbox"];
   const browser = await browserType.launch(launchOptions);
