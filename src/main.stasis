@@ -824,19 +824,15 @@ function draw_round_number(value: i32, x: f32, y: f32): void {
 function draw_help(): void {
     let title_x: f32 = ui_place_x(0.0, 900.0, text_runs[TEXT_HOW_TO_PLAY].width, UiHorizontal.Center);
     draw_text(TEXT_HOW_TO_PLAY, title_x, 270.0, 0.15, 0.20, 0.22, 1.0);
-    let labels: i32[4];
-    labels[0] = TEXT_HELP_LOOK;
-    labels[1] = TEXT_HELP_RULE;
-    labels[2] = TEXT_HELP_TAP;
-    labels[3] = TEXT_HELP_TRY;
     let step: i32 = 0;
     for (step = 0; step < 4; step = step + 1) {
         let y: f32 = 430.0 + i32_to_f32(step) * 245.0;
+        let label: i32 = TEXT_HELP_LOOK + step;
         fill_rect(88.0, y + 12.0, 740.0, 190.0, 0.78, 0.82, 0.85, 1.0);
         fill_rect(80.0, y, 740.0, 190.0, 1.0, 1.0, 1.0, 1.0);
-        let label_x: f32 = ui_place_x(80.0, 740.0, text_runs[labels[step]].width, UiHorizontal.Center);
-        let label_y: f32 = ui_place_y(y, 190.0, text_runs[labels[step]].height, UiVertical.Center);
-        draw_text(labels[step], label_x, label_y, 0.15, 0.20, 0.22, 1.0);
+        let label_x: f32 = ui_place_x(80.0, 740.0, text_runs[label].width, UiHorizontal.Center);
+        let label_y: f32 = ui_place_y(y, 190.0, text_runs[label].height, UiVertical.Center);
+        draw_text(label, label_x, label_y, 0.15, 0.20, 0.22, 1.0);
     }
     fill_rect(158.0, 1482.0, 600.0, 180.0, 0.08, 0.28, 0.42, 1.0);
     fill_rect(150.0, 1470.0, 600.0, 180.0, 0.13, 0.42, 0.63, 1.0);

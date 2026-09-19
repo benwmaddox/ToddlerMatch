@@ -43,3 +43,105 @@ jobs:
           "${stasis}" check
           "${stasis}" test
           pwsh ./tools/promote-vector-assets.ps1 -Check
+
+  packaged-browser-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install WebAssembly optimizer
+        run: sudo apt-get update && sudo apt-get install --yes binaryen
+
+      - name: Read repository-pinned Stasis nightly
+        id: stasis_release
+        shell: pwsh
+        run: |
+          $releaseId = [string]((Get-Content stasis.json -Raw | ConvertFrom-Json).vendor.stasis.release_id)
+          if ($releaseId -notmatch '^nightly-[0-9]{8}-[0-9]+$') { throw "Invalid pinned Stasis release: $releaseId" }
+          "release_id=$releaseId" >> $env:GITHUB_OUTPUT
+
+      - name: Restore repository-pinned Stasis nightly
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-linux-x64.tar.gz -ReleaseTag "${{ steps.stasis_release.outputs.release_id }}"
+
+      - name: Install pinned Playwright browsers
+        shell: bash
+        env:
+          PLAYWRIGHT_ROOT: ${{ runner.temp }}/maddox-652-playwright
+        run: |
+          set -euo pipefail
+          npm install --prefix "$PLAYWRIGHT_ROOT" --no-save --no-package-lock playwright@1.58.2
+          "$PLAYWRIGHT_ROOT/node_modules/.bin/playwright" install --with-deps chromium firefox
+
+      - name: Build fresh pinned Web package
+        shell: bash
+        run: |
+          set -euo pipefail
+          stasis="$PWD/.release-toolchain/bin/stasis"
+          "$stasis" vendor status --workspace "$PWD"
+          "$stasis" fmt --check
+          "$stasis" check
+          "$stasis" test
+          rm -rf dist/maddox-652-web .stasis_cache
+          "$stasis" package --target web --out dist/maddox-652-web
+          test -s dist/maddox-652-web/index.html
+          test -s dist/maddox-652-web/game.js
+          test -s dist/maddox-652-web/game.wasm
+          sha256sum dist/maddox-652-web/game.js dist/maddox-652-web/game.wasm dist/maddox-652-web/index.html > "$RUNNER_TEMP/maddox-652-package-sha256.txt"
+
+      - name: Run packaged Help and shuffle flow in Chromium
+        shell: bash
+        env:
+          PLAYWRIGHT_ROOT: ${{ runner.temp }}/maddox-652-playwright
+        run: |
+          set -euo pipefail
+          node tools/maddox-652-browser-regression.mjs \
+            --package-dir dist/maddox-652-web \
+            --out "$RUNNER_TEMP/maddox-652-chromium" \
+            --playwright-module "$PLAYWRIGHT_ROOT/node_modules/playwright" \
+            --browser chromium \
+            --no-sandbox
+
+      - name: Run packaged Help and shuffle flow in Firefox
+        shell: bash
+        env:
+          PLAYWRIGHT_ROOT: ${{ runner.temp }}/maddox-652-playwright
+        run: |
+          set -euo pipefail
+          node tools/maddox-652-browser-regression.mjs \
+            --package-dir dist/maddox-652-web \
+            --out "$RUNNER_TEMP/maddox-652-firefox" \
+            --playwright-module "$PLAYWRIGHT_ROOT/node_modules/playwright" \
+            --browser firefox
+
+      - name: Verify browser reports and package hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for browser in chromium firefox; do
+            report="$RUNNER_TEMP/maddox-652-$browser/maddox-652-browser-report.json"
+            test -s "$report"
+            jq -e --arg browser "$browser" '.browser == $browser and ([.scenarios[] | .status] | all(. == "pass"))' "$report" >/dev/null
+          done
+          test -s "$RUNNER_TEMP/maddox-652-package-sha256.txt"
+
+      - name: Upload packaged-browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maddox-652-packaged-browser-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/maddox-652-package-sha256.txt
+            ${{ runner.temp }}/maddox-652-chromium
+            ${{ runner.temp }}/maddox-652-firefox
+          if-no-files-found: error
+          retention-days: 7

@@ -56,7 +56,9 @@ test `generation is deterministic bounded and guarantees a match`(): bool {
 
 test `generated rounds preserve constraints across levels and rules`(): bool {
     reset_game(395);
-    let goals_seen: bool[3];
+    let saw_color: bool = false;
+    let saw_shape: bool = false;
+    let saw_number: bool = false;
     let level: i32 = 1;
     for (level = 1; level <= 4; level = level + 1) {
         configure_level(level);
@@ -75,7 +77,13 @@ test `generated rounds preserve constraints across levels and rules`(): bool {
             ) {
                 return false;
             }
-            goals_seen[game.goal] = true;
+            if (game.goal == GOAL_COLOR) {
+                saw_color = true;
+            } else if (game.goal == GOAL_SHAPE) {
+                saw_shape = true;
+            } else {
+                saw_number = true;
+            }
             let matches: i32 = 0;
             let option: i32 = 0;
             for (option = 0; option < game.option_count; option = option + 1) {
@@ -98,7 +106,7 @@ test `generated rounds preserve constraints across levels and rules`(): bool {
             }
         }
     }
-    return goals_seen[GOAL_COLOR] && goals_seen[GOAL_SHAPE] && goals_seen[GOAL_NUMBER];
+    return saw_color && saw_shape && saw_number;
 }
 
 test `correct choices retire once and win at zero`(): bool {
