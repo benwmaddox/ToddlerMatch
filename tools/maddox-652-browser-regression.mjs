@@ -181,8 +181,46 @@ function diagnosticsHealthy(state) {
   return state.pageErrors.length === 0 && state.consoleErrors.length === 0 && state.requestFailures.length === 0;
 }
 
-async function waitReady(page) {
-  await page.waitForFunction(() => document.body?.dataset.ready === "true", undefined, { timeout: 15000 });
+async function startupEvidence(page, diag) {
+  const browser = await page.evaluate(() => {
+    const canvas = document.getElementById("stasis-canvas");
+    const loading = document.getElementById("stasis-loading");
+    const loadingStatus = document.getElementById("stasis-loading-status");
+    const error = document.getElementById("stasis-error");
+    let webgl2 = false;
+    let webgl2Error = "";
+    try {
+      webgl2 = !!canvas?.getContext?.("webgl2");
+    } catch (cause) {
+      webgl2Error = String(cause?.stack || cause);
+    }
+    return {
+      dataset: { ...(document.body?.dataset || {}) },
+      loading: loadingStatus?.textContent || loading?.textContent || "",
+      error: error?.textContent || "",
+      fontStatus: document.fonts?.status || "unavailable",
+      webgl2,
+      webgl2Error,
+      userAgent: navigator.userAgent
+    };
+  });
+  return { browser, diagnostics: diag };
+}
+
+async function waitReady(page, diag) {
+  try {
+    await page.waitForFunction(() => {
+      const ready = document.body?.dataset.ready;
+      return ready === "true" || ready === "false";
+    }, undefined, { timeout: 15000 });
+  } catch (cause) {
+    const evidence = await startupEvidence(page, diag);
+    throw new Error(`Packaged runtime did not publish readiness: ${JSON.stringify(evidence)}`, { cause });
+  }
+  const evidence = await startupEvidence(page, diag);
+  if (evidence.browser.dataset.ready !== "true") {
+    throw new Error(`Packaged runtime startup failed: ${JSON.stringify(evidence)}`);
+  }
 }
 
 async function clickLogical(page, point, waitMs) {
@@ -211,7 +249,7 @@ async function runHelpScenario(browser, url, outDir, args) {
   const phases = [];
   try {
     await page.goto(url, { waitUntil: "networkidle" });
-    await waitReady(page);
+    await waitReady(page, diag);
     let state = await snapshot(page);
     phases.push({ name: "initial-levels", state });
     await clickLogical(page, GEOMETRY.help, args.waitMs);
@@ -266,7 +304,7 @@ async function runShuffleScenario(browser, url, outDir, args, level) {
     const diag = diagnostics(page);
     try {
       await page.goto(url, { waitUntil: "networkidle" });
-      await waitReady(page);
+      await waitReady(page, diag);
       await clickLogical(page, levelPoint, args.waitMs);
       let state = await snapshot(page);
       phases.push({ name: `level${level}-correct-before-input`, state });
@@ -291,7 +329,7 @@ async function runShuffleScenario(browser, url, outDir, args, level) {
     const diag = diagnostics(page);
     try {
       await page.goto(url, { waitUntil: "networkidle" });
-      await waitReady(page);
+      await waitReady(page, diag);
       await clickLogical(page, levelPoint, args.waitMs);
       let state = await snapshot(page);
       phases.push({ name: `level${level}-wrong-before-input`, state, sourceContract: GEOMETRY.wrongCard.source });
