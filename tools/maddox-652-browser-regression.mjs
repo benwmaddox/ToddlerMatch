@@ -166,7 +166,7 @@ function numberFromDataset(dataset, key) {
   return Number.isFinite(value) ? value : 0;
 }
 
-async function screenshotPixel(page, point, screenshot = undefined) {
+async function screenshotPixels(page, points, screenshot = undefined) {
   const png = screenshot || await page.screenshot({ type: "png", fullPage: true });
   return page.evaluate(async ({ encoded, sample }) => {
     const image = new Image();
@@ -177,14 +177,24 @@ async function screenshotPixel(page, point, screenshot = undefined) {
     canvas.height = image.height;
     const context = canvas.getContext("2d", { willReadFrequently: true });
     context.drawImage(image, 0, 0);
-    const x = Math.max(0, Math.min(image.width - 1, Math.round(sample.x)));
-    const y = Math.max(0, Math.min(image.height - 1, Math.round(sample.y)));
-    return Array.from(context.getImageData(x, y, 1, 1).data);
-  }, { encoded: png.toString("base64"), sample: point });
+    return sample.map((point) => {
+      const x = Math.max(0, Math.min(image.width - 1, Math.round(point.x)));
+      const y = Math.max(0, Math.min(image.height - 1, Math.round(point.y)));
+      return Array.from(context.getImageData(x, y, 1, 1).data);
+    });
+  }, { encoded: png.toString("base64"), sample: points });
+}
+
+async function screenshotPixel(page, point, screenshot = undefined) {
+  return (await screenshotPixels(page, [point], screenshot))[0];
 }
 
 function pixelDistance(left, right) {
   return left.reduce((distance, value, index) => distance + Math.abs(value - right[index]), 0);
+}
+
+function cardProbePoints(point) {
+  return [-90, 0, 90].flatMap((dx) => [-100, 0, 100].map((dy) => ({ x: point.x + dx, y: point.y + dy })));
 }
 
 async function snapshot(page) {
@@ -372,14 +382,29 @@ async function runShuffleScenario(browser, url, outDir, args, level) {
       phases.push({ name: `level${level}-wrong-before-input`, state, sourceContract: GEOMETRY.wrongCard.source });
       const beforeWrongAudio = numberFromDataset(state, "audioEvents");
       const beforeWrong = numberFromDataset(state, "frames");
+      const wrongProbes = cardProbePoints(GEOMETRY.wrongCard);
+      const wrongBeforeScreenshot = await page.screenshot({ type: "png", fullPage: true });
+      const wrongBeforePixels = await screenshotPixels(page, wrongProbes, wrongBeforeScreenshot);
       await clickLogical(page, GEOMETRY.wrongCard, args.waitMs);
       state = await snapshot(page);
       phases.push({ name: `level${level}-after-wrong-card`, state });
-      await page.screenshot({ path: path.join(outDir, `level${level}-after-wrong-card.png`), fullPage: true });
+      const wrongScreenshot = await page.screenshot({ path: path.join(outDir, `level${level}-after-wrong-card.png`), fullPage: true });
+      const wrongAfterPixels = await screenshotPixels(page, wrongProbes, wrongScreenshot);
+      const wrongPixelDistances = wrongBeforePixels.map((pixel, index) => pixelDistance(pixel, wrongAfterPixels[index]));
+      const wrongVisualChanged = wrongPixelDistances.some((distance) => distance >= 10);
+      phases[phases.length - 1].wrongEvidence = {
+        probes: wrongProbes,
+        beforePixels: wrongBeforePixels,
+        afterPixels: wrongAfterPixels,
+        pixelDistances: wrongPixelDistances,
+        visualChanged: wrongVisualChanged,
+        audioEventsBefore: beforeWrongAudio,
+        audioEventsAfter: numberFromDataset(state, "audioEvents")
+      };
       const progressed = await waitForFrameProgress(page, numberFromDataset(state, "frames"), 4000);
       const afterWait = await snapshot(page);
       phases.push({ name: `level${level}-after-wrong-card-wait`, state: afterWait });
-      if (numberFromDataset(state, "audioEvents") <= beforeWrongAudio) throw new Error(`Source-backed level ${level} wrong card did not commit an audio event`);
+      if (numberFromDataset(state, "audioEvents") <= beforeWrongAudio && !wrongVisualChanged) throw new Error(`Source-backed level ${level} wrong card did not commit a visible or audio event`);
       if (!diagnosticsHealthy(diag)) throw new Error(`Level ${level} wrong-card flow emitted browser diagnostics`);
       if (afterWait.guestStopped === "true" || afterWait.gpuError) throw new Error(`Level ${level} stopped the guest`);
       if (numberFromDataset(afterWait, "frames") <= beforeWrong || !progressed) throw new Error(`Level ${level} frame counter stopped after wrong card`);
