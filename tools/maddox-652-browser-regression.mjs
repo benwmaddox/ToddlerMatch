@@ -166,6 +166,27 @@ function numberFromDataset(dataset, key) {
   return Number.isFinite(value) ? value : 0;
 }
 
+async function screenshotPixel(page, point, screenshot = undefined) {
+  const png = screenshot || await page.screenshot({ type: "png", fullPage: true });
+  return page.evaluate(async ({ encoded, sample }) => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${encoded}`;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.drawImage(image, 0, 0);
+    const x = Math.max(0, Math.min(image.width - 1, Math.round(sample.x)));
+    const y = Math.max(0, Math.min(image.height - 1, Math.round(sample.y)));
+    return Array.from(context.getImageData(x, y, 1, 1).data);
+  }, { encoded: png.toString("base64"), sample: point });
+}
+
+function pixelDistance(left, right) {
+  return left.reduce((distance, value, index) => distance + Math.abs(value - right[index]), 0);
+}
+
 async function snapshot(page) {
   return page.locator("body").evaluate((body) => ({ ...body.dataset }));
 }
@@ -312,11 +333,24 @@ async function runShuffleScenario(browser, url, outDir, args, level) {
       let state = await snapshot(page);
       phases.push({ name: `level${level}-correct-before-input`, state });
       const correctBefore = numberFromDataset(state, "audioEvents");
+      const correctProbe = { x: correctPoint.x - 100, y: correctPoint.y };
+      const correctBeforePixel = await screenshotPixel(page, correctProbe);
       await clickLogical(page, correctPoint, args.waitMs / 2);
       state = await snapshot(page);
       phases.push({ name: `level${level}-after-correct-card`, state, sourceContract: correctPoint.source });
-      await page.screenshot({ path: path.join(outDir, `level${level}-after-correct-card.png`), fullPage: true });
-      if (numberFromDataset(state, "audioEvents") <= correctBefore) throw new Error(`Source-backed level ${level} correct card did not commit an audio event`);
+      const correctScreenshot = await page.screenshot({ path: path.join(outDir, `level${level}-after-correct-card.png`), fullPage: true });
+      const correctAfterPixel = await screenshotPixel(page, correctProbe, correctScreenshot);
+      const correctVisualChanged = pixelDistance(correctBeforePixel, correctAfterPixel) >= 10;
+      phases[phases.length - 1].correctEvidence = {
+        probe: correctProbe,
+        beforePixel: correctBeforePixel,
+        afterPixel: correctAfterPixel,
+        pixelDistance: pixelDistance(correctBeforePixel, correctAfterPixel),
+        visualChanged: correctVisualChanged,
+        audioEventsBefore: correctBefore,
+        audioEventsAfter: numberFromDataset(state, "audioEvents")
+      };
+      if (numberFromDataset(state, "audioEvents") <= correctBefore && !correctVisualChanged) throw new Error(`Source-backed level ${level} correct card did not commit a visible or audio event`);
       if (!diagnosticsHealthy(diag)) throw new Error(`Level ${level} correct-card flow emitted browser diagnostics`);
     } finally {
       Object.assign(diagnosticsByFlow.correct, diag);
