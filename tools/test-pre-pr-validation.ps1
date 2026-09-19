@@ -45,6 +45,21 @@ try {
         if ($quarterly -notmatch [Regex]::Escape($requiredText)) { throw "Quarterly pin contract is missing: $requiredText" }
     }
     if ($quarterly -match [Regex]::Escape("git push origin master")) { throw "Quarterly updater must not push directly to master" }
+    if ($quarterly -notmatch '(?m)^\s*schedule:\s*\r?\n\s*- cron: "17 13 1 1,4,7,10 \*"') { throw "Quarterly pin workflow must keep the stable quarter-start schedule" }
+    if ($quarterly -notmatch 'ref: master' -or $quarterly -notmatch 'origin/master') { throw "Quarterly pin branch must start from master" }
+    if ($quarterly -notmatch 'force-with-lease') { throw "Quarterly updater must protect the automation branch with force-with-lease" }
+    if ($quarterly -notmatch 'vendor update --workspace' -or $quarterly -notmatch 'vendor status --workspace') { throw "Quarterly updater must perform only mechanical vendor validation" }
+    if ($quarterly -match 'pre-pr-validation\.ps1|stasis fmt|stasis check|stasis test|stasis package|build-android-apk') { throw "Quarterly updater must not gate the pin on compatibility or release builds" }
+    if ($quarterly -match '(?m)^\s*(strategy|matrix):') { throw "Quarterly pin workflow must not fan out a release matrix" }
+    if ($quarterly -match 'stasis package|build-android-apk') { throw "Quarterly pin workflow must not build release artifacts" }
+
+    $weekly = Get-Content -LiteralPath (Join-Path $ProjectRoot ".github/workflows/weekly-release.yml") -Raw
+    foreach ($requiredText in @('"stasis.json"', '"vendor/stasis"', 'vendor status --workspace', 'stasis_release=$pinnedStasis')) {
+        if ($weekly -notmatch [Regex]::Escape($requiredText)) { throw "Weekly checked-in pin contract is missing: $requiredText" }
+    }
+    if ($weekly -notmatch '(?m)^\s*default: false\s*$') { throw "Weekly manual force must default to false" }
+    if ($weekly -match 'resolve-stasis-nightly\.ps1') { throw "Weekly release must not resolve a moving Stasis nightly" }
+    if ($weekly -match 'vendor update --workspace') { throw "Weekly release must not mutate the checked-in vendor snapshot" }
     Write-Output "Pre-PR validation receipt contract passed."
 } finally {
     if (Test-Path -LiteralPath $outputDirectory) {

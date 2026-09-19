@@ -1,15 +1,15 @@
-name: Quarterly Stasis refresh
+name: Quarterly Stasis pin
 
 on:
-  # The first day of each quarter keeps this independent from the weekly
-  # game-owned release check. It always exercises the newest complete Stasis
-  # nightly, even when the game source is unchanged.
+  # The first day of each quarter is the stable compatibility-pin schedule.
+  # This workflow only updates the checked-in pin; the normal weekly release
+  # owns the one all-target build after that PR is merged.
   schedule:
     - cron: "17 13 1 1,4,7,10 *"
   workflow_dispatch:
 
 concurrency:
-  group: toddler-match-quarterly-stasis-${{ github.ref }}
+  group: toddler-match-quarterly-stasis-pin
   cancel-in-progress: true
 
 permissions:
@@ -19,216 +19,32 @@ jobs:
   resolve:
     runs-on: ubuntu-latest
     outputs:
-      stasis_release: ${{ steps.nightly.outputs.release_id }}
+      is_quarterly: ${{ steps.calendar.outputs.is_quarterly }}
+      stasis_release: ${{ steps.calendar.outputs.stasis_release }}
     steps:
       - uses: actions/checkout@v7
-      - name: Resolve newest complete Stasis nightly
-        id: nightly
+        with:
+          ref: master
+      - name: Select exact quarterly schedule and newest complete Stasis
+        id: calendar
         shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          $ErrorActionPreference = "Stop"
+          $ErrorActionPreference = 'Stop'
+          $isQuarterly = $env:EVENT_NAME -eq 'schedule' -or $env:EVENT_NAME -eq 'workflow_dispatch'
+          "is_quarterly=$($isQuarterly.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           $releaseId = (./tools/resolve-stasis-nightly.ps1 | Out-String).Trim()
-          if ($releaseId -notmatch '^nightly-[0-9]{8}-[0-9]+$') { throw "Unable to resolve a complete Stasis nightly" }
-          "release_id=$releaseId" >> $env:GITHUB_OUTPUT
-
-  preflight:
-    needs: resolve
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - name: Restore newest complete Stasis nightly
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-linux-x64.tar.gz -ReleaseTag "${{ needs.resolve.outputs.stasis_release }}"
-      - name: Run cheap Linux preflight
-        shell: bash
-        run: |
-          set -euo pipefail
-          stasis="$PWD/.release-toolchain/bin/stasis"
-          "$stasis" vendor update --workspace "$PWD"
-          pwsh ./tools/promote-vector-assets.ps1 -Check
-          "$stasis" fmt --check
-          "$stasis" check
-          "$stasis" test
-
-  desktop:
-    needs: [resolve, preflight]
-    if: needs.preflight.result == 'success'
-    timeout-minutes: 45
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            asset: stasis-nightly-linux-x64.tar.gz
-          - os: windows-latest
-            platform: windows
-            asset: stasis-nightly-win-x64.zip
-          - os: macos-15
-            platform: macos
-            asset: stasis-nightly-osx-arm64.tar.gz
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v7
-      - name: Restore newest complete Stasis nightly
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./tools/restore-stasis-release.ps1 -AssetName "${{ matrix.asset }}" -ReleaseTag "${{ needs.resolve.outputs.stasis_release }}"
-      - name: Build Linux desktop package
-        if: matrix.platform == 'linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          stasis="$PWD/.release-toolchain/bin/stasis"
-          "$stasis" vendor update --workspace "$PWD"
-          "$stasis" fmt --check
-          "$stasis" check
-          "$stasis" test
-          rm -rf dist/toddler-match-quarterly .stasis_cache
-          "$stasis" package --target desktop --out dist/toddler-match-quarterly
-          tar -czf "toddler-match-quarterly-${{ needs.resolve.outputs.stasis_release }}-linux-x64.tar.gz" -C dist toddler-match-quarterly
-      - name: Build macOS desktop package
-        if: matrix.platform == 'macos'
-        shell: bash
-        run: |
-          set -euo pipefail
-          stasis="$PWD/.release-toolchain/bin/stasis"
-          "$stasis" vendor update --workspace "$PWD"
-          "$stasis" fmt --check
-          "$stasis" check
-          "$stasis" test
-          rm -rf dist/toddler-match-quarterly .stasis_cache
-          "$stasis" package --target desktop --out dist/toddler-match-quarterly
-          tar -czf "toddler-match-quarterly-${{ needs.resolve.outputs.stasis_release }}-macos-arm64.tar.gz" -C dist toddler-match-quarterly
-      - name: Build Windows desktop package
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $stasis = (Resolve-Path ./.release-toolchain/stasis.exe).Path
-          & $stasis vendor update --workspace (Get-Location).Path
-          if ($LASTEXITCODE -ne 0) { throw "Stasis vendor update failed" }
-          & $stasis fmt --check; if ($LASTEXITCODE -ne 0) { throw "Stasis fmt failed" }
-          & $stasis check; if ($LASTEXITCODE -ne 0) { throw "Stasis check failed" }
-          & $stasis test; if ($LASTEXITCODE -ne 0) { throw "Stasis test failed" }
-          $package = "dist/toddler-match-quarterly"
-          if (Test-Path -LiteralPath $package) { Remove-Item -LiteralPath $package -Recurse -Force }
-          if (Test-Path -LiteralPath .stasis_cache) { Remove-Item -LiteralPath .stasis_cache -Recurse -Force }
-          & $stasis package --target desktop --out $package
-          if ($LASTEXITCODE -ne 0) { throw "Stasis desktop package failed" }
-          Compress-Archive -Path $package -DestinationPath "toddler-match-quarterly-${{ needs.resolve.outputs.stasis_release }}-windows-x64.zip" -CompressionLevel Optimal
-      - uses: actions/upload-artifact@v4
-        with:
-          name: toddler-match-quarterly-desktop-${{ matrix.platform }}
-          path: toddler-match-quarterly-*.*
-          if-no-files-found: error
-          retention-days: 7
-
-  android:
-    needs: [resolve, preflight]
-    if: needs.preflight.result == 'success'
-    runs-on: windows-latest
-    timeout-minutes: 75
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - uses: android-actions/setup-android@v3
-      - name: Install pinned Android SDK components
-        shell: pwsh
-        run: |
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.0.12077973"
-          if ($LASTEXITCODE -ne 0) { throw "Android SDK component installation failed" }
-      - name: Restore newest complete Stasis nightly
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-win-x64.zip -ReleaseTag "${{ needs.resolve.outputs.stasis_release }}"
-          (Resolve-Path ./.release-toolchain).Path | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      - name: Restore pinned Android dependencies
-        shell: pwsh
-        run: ./tools/restore-android-dependencies.ps1 -StasisPath (Resolve-Path ./.release-toolchain/stasis.exe)
-      - name: Restore stable Android debug keystore
-        shell: pwsh
-        env:
-          WEEKLY_ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.WEEKLY_ANDROID_DEBUG_KEYSTORE_BASE64 }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:WEEKLY_ANDROID_DEBUG_KEYSTORE_BASE64)) { throw "WEEKLY_ANDROID_DEBUG_KEYSTORE_BASE64 is required" }
-          $keyPath = Join-Path $env:RUNNER_TEMP "toddler-match-quarterly-debug.keystore"
-          [IO.File]::WriteAllBytes($keyPath, [Convert]::FromBase64String($env:WEEKLY_ANDROID_DEBUG_KEYSTORE_BASE64))
-          "WEEKLY_ANDROID_DEBUG_KEYSTORE_PATH=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Build and audit Android arm64 APK
-        shell: pwsh
-        env:
-          VERSION: quarterly.${{ github.run_number }}
-          RUN_NUMBER: ${{ github.run_number }}
-        run: |
-          ./tools/build-android-apk.ps1 -StasisPath (Resolve-Path ./.release-toolchain/stasis.exe) -DebugKeystorePath $env:WEEKLY_ANDROID_DEBUG_KEYSTORE_PATH -VersionCode $env:RUN_NUMBER -VersionName $env:VERSION
-          if ($LASTEXITCODE -ne 0) { throw "Android packaging failed" }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: toddler-match-quarterly-android
-          path: toddler-match-quarterly.*-android-arm64.apk
-          if-no-files-found: error
-          retention-days: 7
-      - name: Remove Android tools, caches, and signing key
-        if: always()
-        shell: pwsh
-        run: |
-          @(".release-toolchain", ".stasis_cache", ".gradle-cache", "vendor/android-deps", "dist/android-weekly") | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object { Remove-Item -LiteralPath $_ -Recurse -Force -ErrorAction SilentlyContinue }
-          if ($env:WEEKLY_ANDROID_DEBUG_KEYSTORE_PATH -and (Test-Path -LiteralPath $env:WEEKLY_ANDROID_DEBUG_KEYSTORE_PATH)) { Remove-Item -LiteralPath $env:WEEKLY_ANDROID_DEBUG_KEYSTORE_PATH -Force -ErrorAction SilentlyContinue }
-
-  web:
-    needs: [resolve, preflight]
-    if: needs.preflight.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-      - name: Install WebAssembly optimizer
-        run: sudo apt-get update && sudo apt-get install --yes binaryen
-      - name: Restore newest complete Stasis nightly
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-linux-x64.tar.gz -ReleaseTag "${{ needs.resolve.outputs.stasis_release }}"
-      - name: Build web package
-        shell: bash
-        run: |
-          set -euo pipefail
-          stasis="$PWD/.release-toolchain/bin/stasis"
-          "$stasis" vendor update --workspace "$PWD"
-          "$stasis" fmt --check
-          "$stasis" check
-          "$stasis" test
-          rm -rf dist/toddler-match-quarterly-web .stasis_cache
-          "$stasis" package --target web --out dist/toddler-match-quarterly-web
-          pwsh -NoProfile -File tools/apply-branding.ps1 -WebRoot dist/toddler-match-quarterly-web
-          tar -czf "toddler-match-quarterly-${{ needs.resolve.outputs.stasis_release }}-web.tar.gz" -C dist toddler-match-quarterly-web
-      - uses: actions/upload-artifact@v4
-        with:
-          name: toddler-match-quarterly-web
-          path: toddler-match-quarterly-*-web.tar.gz
-          if-no-files-found: error
-          retention-days: 7
+          if ($releaseId -notmatch '^nightly-[0-9]{8}-[0-9]+$') { throw "Unable to resolve a complete Stasis nightly: $releaseId" }
+          "stasis_release=$releaseId" >> $env:GITHUB_OUTPUT
+          "Quarterly pin candidate: $releaseId" >> $env:GITHUB_STEP_SUMMARY
 
   pin-update-pr:
-    needs: [resolve, desktop, android, web]
-    if: >-
-      needs.desktop.result == 'success' &&
-      needs.android.result == 'success' &&
-      needs.web.result == 'success'
+    needs: resolve
+    if: needs.resolve.outputs.is_quarterly == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       actions: write
       contents: write
@@ -237,48 +53,65 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Restore validated Stasis nightly
+          ref: master
+      - name: Prepare dedicated branch from master
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin master --depth=1
+          git fetch origin automation/quarterly-stasis-pin --depth=1 || true
+          git switch -C automation/quarterly-stasis-pin origin/master
+      - name: Restore selected Stasis nightly
         shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-linux-x64.tar.gz -ReleaseTag "${{ needs.resolve.outputs.stasis_release }}"
       - name: Update checked-in Stasis pin and vendor snapshot
-        run: ./.release-toolchain/bin/stasis vendor update --workspace "$PWD"
-      - name: Create or update quarterly pin PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          stasis="$PWD/.release-toolchain/bin/stasis"
+          "$stasis" vendor update --workspace "$PWD"
+          release_id="$(jq -r '.vendor.stasis.release_id' stasis.json)"
+          test "$release_id" = '${{ needs.resolve.outputs.stasis_release }}'
+          "$stasis" vendor status --workspace "$PWD"
+      - name: Create or update dedicated quarterly pin PR
         id: pin
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           STASIS_RELEASE: ${{ needs.resolve.outputs.stasis_release }}
         run: |
-          $ErrorActionPreference = "Stop"
+          $ErrorActionPreference = 'Stop'
+          $unexpected = @(git status --porcelain | ForEach-Object { $_.Substring(3) } | Where-Object { $_ -notmatch '^(stasis\.json|vendor/stasis(?:/|$))' })
+          if ($unexpected.Count -gt 0) { throw "Quarterly pin update touched unexpected paths: $($unexpected -join ', ')" }
           if (-not (git status --porcelain -- stasis.json vendor/stasis)) {
-            "changed=false" >> $env:GITHUB_OUTPUT
-            "Checked-in Stasis pin is already current." >> $env:GITHUB_STEP_SUMMARY
+            'changed=false' >> $env:GITHUB_OUTPUT
+            'The checked-in Stasis pin is already current.' >> $env:GITHUB_STEP_SUMMARY
             exit 0
           }
-          $branch = "automation/quarterly-stasis-pin"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -C $branch
+          $branch = 'automation/quarterly-stasis-pin'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add stasis.json vendor/stasis
           git commit -m "chore: pin Stasis $env:STASIS_RELEASE"
-          git push origin "HEAD:refs/heads/$branch" --force
+          git push --force-with-lease origin "HEAD:refs/heads/$branch"
           $number = gh pr list --head $branch --base master --state open --json number --jq '.[0].number'
           $body = @"
-          Quarterly Stasis compatibility validation completed successfully across Linux, Windows, macOS, Android, and Web.
+          Quarterly Stasis pin update was prepared from the newest complete nightly.
 
           - Pins Stasis to `$env:STASIS_RELEASE`
           - Refreshes `vendor/stasis`
-          - The cheap branch gate is dispatched explicitly after this PR is created or updated.
+          - Contains no game-source or release-artifact changes
+          - The cheap PR gate is dispatched explicitly after this PR is created or updated
           "@
           if ([string]::IsNullOrWhiteSpace($number)) {
             gh pr create --base master --head $branch --title "chore: pin Stasis $env:STASIS_RELEASE" --body $body
           } else {
             gh pr edit $number --title "chore: pin Stasis $env:STASIS_RELEASE" --body $body
           }
-          if ($LASTEXITCODE -ne 0) { throw "Unable to create or update quarterly Stasis pin PR" }
-          "changed=true" >> $env:GITHUB_OUTPUT
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to create or update quarterly Stasis pin PR.' }
+          'changed=true' >> $env:GITHUB_OUTPUT
       - name: Dispatch cheap pin-branch gate
         if: steps.pin.outputs.changed == 'true'
         env:
