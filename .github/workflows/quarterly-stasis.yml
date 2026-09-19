@@ -220,3 +220,67 @@ jobs:
           path: toddler-match-quarterly-*-web.tar.gz
           if-no-files-found: error
           retention-days: 7
+
+  pin-update-pr:
+    needs: [resolve, desktop, android, web]
+    if: >-
+      needs.desktop.result == 'success' &&
+      needs.android.result == 'success' &&
+      needs.web.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Restore validated Stasis nightly
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-linux-x64.tar.gz -ReleaseTag "${{ needs.resolve.outputs.stasis_release }}"
+      - name: Update checked-in Stasis pin and vendor snapshot
+        run: ./.release-toolchain/bin/stasis vendor update --workspace "$PWD"
+      - name: Create or update quarterly pin PR
+        id: pin
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STASIS_RELEASE: ${{ needs.resolve.outputs.stasis_release }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (-not (git status --porcelain -- stasis.json vendor/stasis)) {
+            "changed=false" >> $env:GITHUB_OUTPUT
+            "Checked-in Stasis pin is already current." >> $env:GITHUB_STEP_SUMMARY
+            exit 0
+          }
+          $branch = "automation/quarterly-stasis-pin"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C $branch
+          git add stasis.json vendor/stasis
+          git commit -m "chore: pin Stasis $env:STASIS_RELEASE"
+          git push origin "HEAD:refs/heads/$branch" --force
+          $number = gh pr list --head $branch --base master --state open --json number --jq '.[0].number'
+          $body = @"
+          Quarterly Stasis compatibility validation completed successfully across Linux, Windows, macOS, Android, and Web.
+
+          - Pins Stasis to `$env:STASIS_RELEASE`
+          - Refreshes `vendor/stasis`
+          - The cheap branch gate is dispatched explicitly after this PR is created or updated.
+          "@
+          if ([string]::IsNullOrWhiteSpace($number)) {
+            gh pr create --base master --head $branch --title "chore: pin Stasis $env:STASIS_RELEASE" --body $body
+          } else {
+            gh pr edit $number --title "chore: pin Stasis $env:STASIS_RELEASE" --body $body
+          }
+          if ($LASTEXITCODE -ne 0) { throw "Unable to create or update quarterly Stasis pin PR" }
+          "changed=true" >> $env:GITHUB_OUTPUT
+      - name: Dispatch cheap pin-branch gate
+        if: steps.pin.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pr-stasis-check.yml --ref automation/quarterly-stasis-pin
