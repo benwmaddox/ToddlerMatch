@@ -60,7 +60,6 @@ quarter-start schedule it resolves the newest complete immutable nightly,
 refreshes `stasis.json` and `vendor/stasis`, performs only mechanical identity
 and vendor-status checks, and creates or updates a dedicated pin PR. It never
 builds desktop, Android, or Web artifacts and never pushes a dependency pin
-directly to `master`. It explicitly dispatches the cheap branch gate because a
-pull request created by the built-in GitHub token does not emit a normal
-`pull_request` workflow event. After that PR is merged, the next normal weekly
-release consumes the checked-in pin and is where compatibility is discovered.
+directly to `master`. It leaves the dedicated pin PR for normal review and
+merge; the next normal weekly release consumes the checked-in pin and is where
+compatibility is discovered after that PR is merged.

@@ -41,9 +41,11 @@ try {
         if ($prWorkflow -notmatch [Regex]::Escape($requiredText)) { throw "PR workflow contract is missing: $requiredText" }
     }
     $quarterly = Get-Content -LiteralPath (Join-Path $ProjectRoot ".github/workflows/quarterly-stasis.yml") -Raw
-    foreach ($requiredText in @("pin-update-pr:", "git add stasis.json vendor/stasis", "gh pr create", "gh workflow run pr-stasis-check.yml")) {
+    foreach ($requiredText in @("pin-update-pr:", "git add stasis.json vendor/stasis", "gh pr create")) {
         if ($quarterly -notmatch [Regex]::Escape($requiredText)) { throw "Quarterly pin contract is missing: $requiredText" }
     }
+    if ($quarterly -match 'stasis-pin-sentinel\.yml') { throw "Quarterly updater must not add a standalone sentinel workflow" }
+    if ($quarterly -match 'gh workflow run|gh pr merge') { throw "Quarterly updater must leave the pin PR for normal review" }
     if ($quarterly -match [Regex]::Escape("git push origin master")) { throw "Quarterly updater must not push directly to master" }
     if ($quarterly -notmatch '(?m)^\s*schedule:\s*\r?\n\s*- cron: "17 13 1 1,4,7,10 \*"') { throw "Quarterly pin workflow must keep the stable quarter-start schedule" }
     if ($quarterly -notmatch 'ref: master' -or $quarterly -notmatch 'origin/master') { throw "Quarterly pin branch must start from master" }

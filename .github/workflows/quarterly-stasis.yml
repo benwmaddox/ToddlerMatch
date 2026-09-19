@@ -103,7 +103,7 @@ jobs:
           - Pins Stasis to `$env:STASIS_RELEASE`
           - Refreshes `vendor/stasis`
           - Contains no game-source or release-artifact changes
-          - The cheap PR gate is dispatched explicitly after this PR is created or updated
+          - Requires normal review and merge; the next weekly release owns compatibility validation
           "@
           if ([string]::IsNullOrWhiteSpace($number)) {
             gh pr create --base master --head $branch --title "chore: pin Stasis $env:STASIS_RELEASE" --body $body
@@ -112,8 +112,3 @@ jobs:
           }
           if ($LASTEXITCODE -ne 0) { throw 'Unable to create or update quarterly Stasis pin PR.' }
           'changed=true' >> $env:GITHUB_OUTPUT
-      - name: Dispatch cheap pin-branch gate
-        if: steps.pin.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run pr-stasis-check.yml --ref automation/quarterly-stasis-pin
