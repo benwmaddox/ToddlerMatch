@@ -24,6 +24,7 @@ const AUDIO_PROMPT: i32 = 4;
 const AUDIO_STOP_PROMPT: i32 = 5;
 
 global game: MatchState;
+global shuffle_remaining: i32[9];
 
 struct Card {
     number: i32;
@@ -271,13 +272,12 @@ function leave_level(): void {
 }
 
 function shuffle_unmatched(): void {
-    let remaining: i32[9];
     let count: i32 = 0;
     let i: i32 = 0;
     for (i = 0; i < game.option_count; i = i + 1) {
         game.shuffle_from[i] = i;
         if (!game.options[i].matched) {
-            remaining[count] = i;
+            shuffle_remaining[count] = i;
             count = count + 1;
         }
     }
@@ -288,8 +288,8 @@ function shuffle_unmatched(): void {
     let j: i32 = count - 1;
     for (j = count - 1; j > 0; j = j - 1) {
         let swap_position: i32 = next_random(j + 1);
-        let left: i32 = remaining[j];
-        let right: i32 = remaining[swap_position];
+        let left: i32 = shuffle_remaining[j];
+        let right: i32 = shuffle_remaining[swap_position];
         let temporary_number: i32 = game.options[left].number;
         let temporary_shape: i32 = game.options[left].shape;
         let temporary_color: i32 = game.options[left].color;
@@ -307,27 +307,27 @@ function shuffle_unmatched(): void {
         game.shuffle_from[right] = temporary_from;
     }
     for (i = 0; i < count; i = i + 1) {
-        if (game.shuffle_from[remaining[i]] != remaining[i]) {
+        if (game.shuffle_from[shuffle_remaining[i]] != shuffle_remaining[i]) {
             changed = true;
         }
     }
     if (!changed) {
-        let first: i32 = remaining[0];
+        let first: i32 = shuffle_remaining[0];
         let first_number: i32 = game.options[first].number;
         let first_shape: i32 = game.options[first].shape;
         let first_color: i32 = game.options[first].color;
         let first_matched: bool = game.options[first].matched;
         let first_from: i32 = game.shuffle_from[first];
         for (i = 0; i < count - 1; i = i + 1) {
-            let left: i32 = remaining[i];
-            let right: i32 = remaining[i + 1];
+            let left: i32 = shuffle_remaining[i];
+            let right: i32 = shuffle_remaining[i + 1];
             game.options[left].number = game.options[right].number;
             game.options[left].shape = game.options[right].shape;
             game.options[left].color = game.options[right].color;
             game.options[left].matched = game.options[right].matched;
             game.shuffle_from[left] = game.shuffle_from[right];
         }
-        let last: i32 = remaining[count - 1];
+        let last: i32 = shuffle_remaining[count - 1];
         game.options[last].number = first_number;
         game.options[last].shape = first_shape;
         game.options[last].color = first_color;
