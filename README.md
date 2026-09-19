@@ -13,7 +13,7 @@ Every round is deterministic from the root RNG state and always contains at leas
 
 ## Build
 
-This repository pins the complete immutable Stasis release `nightly-20260913-321` (`a95b7cb86055c35a16636be37e58d8e687a789ad6a8abe7f98e5c635e567a8e6`) and checks in its source-only vendor snapshot.
+This repository pins the complete immutable Stasis release `nightly-20260917-332` (`d5cd9dcf9976306a65380cedd71e517c14cf3bb79206377a30038f7b86406318`) and checks in its source-only vendor snapshot.
 
 ```powershell
 stasis fmt --check
@@ -33,7 +33,7 @@ The project design framework under `docs/` records the source behavior map, desi
 
 ## Releases
 
-Pull requests restore the pinned toolchain and run formatting, compiler, deterministic tests, SVG promotion audits, and a Web package smoke test at the exact head SHA. The Friday/manual weekly workflow resolves one complete immutable Stasis nightly and publishes Windows x64, Linux x64, macOS arm64, Web, and Android arm64 artifacts with `SHA256SUMS.txt` and `BUILD-MANIFEST.json`. Manual runs are force builds; scheduled runs skip only when neither source nor Stasis changed.
+Pull requests restore the pinned toolchain and run the cheap current-head identity, vendor, formatting, compiler, and SVG policy checks. Before opening a PR, run [`docs/validation/pre-pr.md`](docs/validation/pre-pr.md) to execute the broader local tests, fresh Web package, and both Chromium/Firefox regressions once and emit a receipt plus PR-body summary. The Friday/manual weekly workflow resolves one complete immutable Stasis nightly and publishes Windows x64, Linux x64, macOS arm64, Web, and Android arm64 artifacts with `SHA256SUMS.txt` and `BUILD-MANIFEST.json`. Manual runs are force builds; scheduled runs skip only when neither source nor Stasis changed.
 
 ## Application icons and branded packages
 

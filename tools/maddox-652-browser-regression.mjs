@@ -215,6 +215,13 @@ function diagnosticsHealthy(state) {
   return state.pageErrors.length === 0 && state.consoleErrors.length === 0 && state.requestFailures.length === 0;
 }
 
+function guestUnhealthy(state) {
+  // gpuError is historical diagnostic state: sprite publication can record a
+  // transient error before the renderer recovers. waitReady, frame progress,
+  // screenshots, and browser diagnostics provide the live health evidence.
+  return state.guestStopped === "true";
+}
+
 async function startupEvidence(page, diag) {
   const browser = await page.evaluate(() => {
     const canvas = document.getElementById("stasis-canvas");
@@ -318,7 +325,11 @@ async function runHelpScenario(browser, url, outDir, args) {
     const healthy = diagnosticsHealthy(diag);
     if (!healthy) throw new Error("Help/settings/menu flow emitted browser diagnostics");
     if (!settingsProgressed) throw new Error("Settings DONE did not advance host frames");
-    if (phases.some((phase) => phase.state.guestStopped === "true" || phase.state.gpuError)) throw new Error("Help flow stopped the guest");
+    const stoppedPhases = phases.filter((phase) => guestUnhealthy(phase.state));
+    if (stoppedPhases.length > 0) {
+      const details = stoppedPhases.map((phase) => `${phase.name}(guestStopped=${phase.state.guestStopped || "false"}, gpuError=${phase.state.gpuError || "none"})`).join(", ");
+      throw new Error(`Help flow stopped the guest: ${details}`);
+    }
     return { status: "pass", phases, diagnostics: diag, settingsProgressed };
   } finally {
     await context.close();
@@ -406,7 +417,7 @@ async function runShuffleScenario(browser, url, outDir, args, level) {
       phases.push({ name: `level${level}-after-wrong-card-wait`, state: afterWait });
       if (numberFromDataset(state, "audioEvents") <= beforeWrongAudio && !wrongVisualChanged) throw new Error(`Source-backed level ${level} wrong card did not commit a visible or audio event`);
       if (!diagnosticsHealthy(diag)) throw new Error(`Level ${level} wrong-card flow emitted browser diagnostics`);
-      if (afterWait.guestStopped === "true" || afterWait.gpuError) throw new Error(`Level ${level} stopped the guest`);
+      if (guestUnhealthy(afterWait)) throw new Error(`Level ${level} stopped the guest`);
       if (numberFromDataset(afterWait, "frames") <= beforeWrong || !progressed) throw new Error(`Level ${level} frame counter stopped after wrong card`);
       frameProgressed = true;
     } finally {

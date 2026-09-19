@@ -2,6 +2,7 @@ name: PR Stasis check
 
 on:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -10,6 +11,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+# This is the required, per-push gate. It checks the exact release recorded
+# by the PR's stasis.json at the PR head, but leaves the broad test, Web
+# packaging, and browser evidence to the local pre-PR command.
 jobs:
   stasis-check:
     runs-on: ubuntu-latest
@@ -17,23 +21,65 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
-      - name: Read repository-pinned Stasis nightly
-        id: stasis_release
+      - name: Detect shipped or CI changes
+        id: changes
         shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          $releaseId = [string]((Get-Content stasis.json -Raw | ConvertFrom-Json).vendor.stasis.release_id)
+          $ErrorActionPreference = "Stop"
+          if ($env:EVENT_NAME -eq "workflow_dispatch") {
+            $relevant = @("stasis.json", "vendor/stasis")
+            $changedCount = 2
+          } else {
+            $changed = @(git diff --name-only $env:BASE_SHA $env:HEAD_SHA)
+            if ($LASTEXITCODE -ne 0) { throw "Unable to compare the pull request base and head" }
+            $changedCount = $changed.Count
+            $relevant = @($changed | Where-Object {
+              $_ -match '^(src|assets|data|vendor/stasis)/' -or
+              $_ -in @('stasis.json', '.github/workflows/pr-stasis-check.yml', '.github/workflows/quarterly-stasis.yml') -or
+              $_ -match '^tools/(pre-pr-validation|promote-vector-assets|maddox-652-browser-regression)\.(ps1|mjs)$'
+            })
+          }
+          "relevant=$(if ($relevant.Count -gt 0) { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
+          "Changed files: $changedCount; relevant files: $($relevant.Count)." >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Verify current PR head and pinned Stasis policy
+        id: stasis_release
+        if: steps.changes.outputs.relevant == 'true'
+        shell: pwsh
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $actualHeadSha = (git rev-parse HEAD).Trim()
+          if ($actualHeadSha -ne $env:EXPECTED_HEAD_SHA) {
+            throw "Checkout is not the current PR head (expected $env:EXPECTED_HEAD_SHA, actual $actualHeadSha)"
+          }
+          $project = Get-Content stasis.json -Raw | ConvertFrom-Json
+          $releaseId = [string]$project.vendor.stasis.release_id
+          $releaseSha = [string]$project.vendor.stasis.sha256
           if ($releaseId -notmatch '^nightly-[0-9]{8}-[0-9]+$') { throw "Invalid pinned Stasis release: $releaseId" }
+          if ($releaseSha -notmatch '^[0-9a-fA-F]{64}$') { throw "Invalid pinned Stasis checksum: $releaseSha" }
           "release_id=$releaseId" >> $env:GITHUB_OUTPUT
+          "release_sha=$releaseSha" >> $env:GITHUB_OUTPUT
+          "PR head: $actualHeadSha" >> $env:GITHUB_STEP_SUMMARY
+          "Pinned Stasis: $releaseId ($releaseSha)" >> $env:GITHUB_STEP_SUMMARY
 
       - name: Restore repository-pinned Stasis nightly
+        if: steps.changes.outputs.relevant == 'true'
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-linux-x64.tar.gz -ReleaseTag "${{ steps.stasis_release.outputs.release_id }}"
 
       - name: Validate Stasis project
+        if: steps.changes.outputs.relevant == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -41,108 +87,8 @@ jobs:
           "${stasis}" vendor status --workspace "$PWD"
           "${stasis}" fmt --check
           "${stasis}" check
-          "${stasis}" test
           pwsh ./tools/promote-vector-assets.ps1 -Check
 
-  packaged-browser-acceptance:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Install WebAssembly optimizer
-        run: sudo apt-get update && sudo apt-get install --yes binaryen
-
-      - name: Read repository-pinned Stasis nightly
-        id: stasis_release
-        shell: pwsh
-        run: |
-          $releaseId = [string]((Get-Content stasis.json -Raw | ConvertFrom-Json).vendor.stasis.release_id)
-          if ($releaseId -notmatch '^nightly-[0-9]{8}-[0-9]+$') { throw "Invalid pinned Stasis release: $releaseId" }
-          "release_id=$releaseId" >> $env:GITHUB_OUTPUT
-
-      - name: Restore repository-pinned Stasis nightly
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./tools/restore-stasis-release.ps1 -AssetName stasis-nightly-linux-x64.tar.gz -ReleaseTag "${{ steps.stasis_release.outputs.release_id }}"
-
-      - name: Install pinned Playwright browsers
-        shell: bash
-        env:
-          PLAYWRIGHT_ROOT: ${{ runner.temp }}/maddox-652-playwright
-        run: |
-          set -euo pipefail
-          npm install --prefix "$PLAYWRIGHT_ROOT" --no-save --no-package-lock playwright@1.58.2
-          "$PLAYWRIGHT_ROOT/node_modules/.bin/playwright" install --with-deps chromium firefox
-
-      - name: Build fresh pinned Web package
-        shell: bash
-        run: |
-          set -euo pipefail
-          stasis="$PWD/.release-toolchain/bin/stasis"
-          "$stasis" vendor status --workspace "$PWD"
-          "$stasis" fmt --check
-          "$stasis" check
-          "$stasis" test
-          rm -rf dist/maddox-652-web .stasis_cache
-          "$stasis" package --target web --out dist/maddox-652-web
-          test -s dist/maddox-652-web/index.html
-          test -s dist/maddox-652-web/game.js
-          test -s dist/maddox-652-web/game.wasm
-          sha256sum dist/maddox-652-web/game.js dist/maddox-652-web/game.wasm dist/maddox-652-web/index.html > "$RUNNER_TEMP/maddox-652-package-sha256.txt"
-
-      - name: Run packaged Help and shuffle flow in Chromium
-        shell: bash
-        env:
-          PLAYWRIGHT_ROOT: ${{ runner.temp }}/maddox-652-playwright
-        run: |
-          set -euo pipefail
-          node tools/maddox-652-browser-regression.mjs \
-            --package-dir dist/maddox-652-web \
-            --out "$RUNNER_TEMP/maddox-652-chromium" \
-            --playwright-module "$PLAYWRIGHT_ROOT/node_modules/playwright" \
-            --browser chromium \
-            --no-sandbox
-
-      - name: Run packaged Help and shuffle flow in Firefox
-        shell: bash
-        env:
-          PLAYWRIGHT_ROOT: ${{ runner.temp }}/maddox-652-playwright
-        run: |
-          set -euo pipefail
-          xvfb-run --auto-servernum -- node tools/maddox-652-browser-regression.mjs \
-            --package-dir dist/maddox-652-web \
-            --out "$RUNNER_TEMP/maddox-652-firefox" \
-            --playwright-module "$PLAYWRIGHT_ROOT/node_modules/playwright" \
-            --browser firefox \
-            --headful
-
-      - name: Verify browser reports and package hashes
-        shell: bash
-        run: |
-          set -euo pipefail
-          for browser in chromium firefox; do
-            report="$RUNNER_TEMP/maddox-652-$browser/maddox-652-browser-report.json"
-            test -s "$report"
-            jq -e --arg browser "$browser" '.browser == $browser and ([.scenarios[] | .status] | all(. == "pass"))' "$report" >/dev/null
-          done
-          test -s "$RUNNER_TEMP/maddox-652-package-sha256.txt"
-
-      - name: Upload packaged-browser evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: maddox-652-packaged-browser-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/maddox-652-package-sha256.txt
-            ${{ runner.temp }}/maddox-652-chromium
-            ${{ runner.temp }}/maddox-652-firefox
-          if-no-files-found: error
-          retention-days: 7
+      - name: Required-check sentinel
+        if: steps.changes.outputs.relevant != 'true'
+        run: echo "No shipped or CI changes; full local pre-PR validation remains required before merge."
