@@ -47,6 +47,7 @@ function parseArgs(argv) {
     browser: "chromium",
     browserExecutable: "",
     playwrightModule: "",
+    headless: true,
     noSandbox: false,
     port: 0,
     waitMs: 900,
@@ -66,6 +67,7 @@ function parseArgs(argv) {
     else if (arg === "--browser") args.browser = next();
     else if (arg === "--browser-executable") args.browserExecutable = path.resolve(next());
     else if (arg === "--playwright-module") args.playwrightModule = path.resolve(next());
+    else if (arg === "--headful") args.headless = false;
     else if (arg === "--no-sandbox") args.noSandbox = true;
     else if (arg === "--port") args.port = Number(next());
     else if (arg === "--wait-ms") args.waitMs = Number(next());
@@ -79,6 +81,7 @@ Options:
   --browser chromium|firefox  Playwright browser type (default: chromium)
   --browser-executable PATH   Optional browser executable override
   --playwright-module PATH    Playwright package directory when not installed locally
+  --headful                   Run a headed browser (Linux CI requires Xvfb)
   --no-sandbox                Pass --no-sandbox to Chromium (for restricted runners)
   --port NUMBER               HTTP port (default: ephemeral)
   --wait-ms NUMBER            Delay after each logical click (default: 900)
@@ -364,7 +367,7 @@ async function main() {
   await fs.mkdir(args.outDir, { recursive: true });
   const playwright = loadPlaywright(args.playwrightModule || process.env.PLAYWRIGHT_MODULE || "");
   const browserType = args.browser === "firefox" ? playwright.firefox : playwright.chromium;
-  const launchOptions = { headless: true };
+  const launchOptions = { headless: args.headless };
   if (args.browser === "firefox") {
     // Hosted Linux runners do not expose a hardware GL device to headless
     // Firefox. Force its supported software WebGL path so this acceptance

@@ -117,11 +117,12 @@ jobs:
           PLAYWRIGHT_ROOT: ${{ runner.temp }}/maddox-652-playwright
         run: |
           set -euo pipefail
-          node tools/maddox-652-browser-regression.mjs \
+          xvfb-run --auto-servernum -- node tools/maddox-652-browser-regression.mjs \
             --package-dir dist/maddox-652-web \
             --out "$RUNNER_TEMP/maddox-652-firefox" \
             --playwright-module "$PLAYWRIGHT_ROOT/node_modules/playwright" \
-            --browser firefox
+            --browser firefox \
+            --headful
 
       - name: Verify browser reports and package hashes
         shell: bash
